@@ -1,0 +1,14 @@
+matminer
+git+https://github.com/zhonger/matminer
+mendeleev
+scikit-learn
+openpyxl
+pandas
+numpy
+matplotlib
+seaborn
+tabulate
+plotly
+dash
+jupyter-dash
+imblearn
