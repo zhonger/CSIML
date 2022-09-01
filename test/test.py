@@ -1,16 +1,21 @@
 # import unittest
+import os
+import sys, time
+
+sys.path.append('/home/lisz/work/SIML/')
 import json
 
 import numpy as np
 import pandas as pd
+import plotly.express as px
+from dash import Dash, Input, Output, dcc, html
 from sklearn import preprocessing
 
 import SIML.CV.cv as cv
 import SIML.Plot.plot as plot
-from SIML.Method.base import PredictOnlyMajor, PredictWithMinor, SIML
-from SIML.Analytics.analysis import AnalysisResults, AnalysisSummarys, SaveMetrics
-from dash import Dash, html, dcc, Input, Output
-import plotly.express as px
+from SIML.Analytics.analysis import (AnalysisResults, AnalysisSummarys,
+                                     SaveMetrics, SaveResults)
+from SIML.Method.base import SIML, PredictOnlyMajor, PredictWithMinor
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
@@ -33,13 +38,28 @@ def WriteList(a_list):
 
 def ReadList():
     with open("results.json", "rb") as fp:
-        n_list = json.loda(fp)
+        n_list = json.load(fp)
     return n_list
 
 if __name__ == '__main__':
+    
+    sheet_names = dict(EXP="468", LDA="468-LDA", PBE="468-PBE", SCAN="468-SCAN", HSE06 = "468-HSE06", HSE06mix = "468-HSE06_mix")
+    # data_sheets = ["EXP", "LDA", "PBE", "SCAN", "HSE06", "HSE06mix"]
+    # data_sheets = ["PBE", "SCAN", "HSE06", "HSE06mix"]
+    # data_sheets = ["SCAN", "HSE06", "HSE06mix"]
+    # data_sheets = ["LDA"]
+    data_sheets = ["EXP"]
+    # data_sheet  = "EXP"
+
     # data = pd.read_excel("bandgap.xlsx", sheet_name=2).iloc[:, [0, -1]]
-    # data = pd.read_excel("bandgap.xlsx", sheet_name="468")
-    data = pd.read_excel("bandgap.xlsx", sheet_name="3895")
+    
+    # data = pd.read_excel("bandgap.xlsx", sheet_name="468-LDA")
+    # data = pd.read_excel("bandgap.xlsx", sheet_name="468-PBE")
+    # data = pd.read_excel("bandgap.xlsx", sheet_name="468-SCAN")
+    # data = pd.read_excel("bandgap.xlsx", sheet_name="468-HSE06")
+    # data = pd.read_excel("bandgap.xlsx", sheet_name="468-HSE06_mix")
+    # data = pd.read_excel("bandgap.xlsx", sheet_name="3895")
+    
     features = ["Number", "AtomicWeight", "Period", "Group", "Family",
                 "LQuantumNumber", "MendeleevNumber",
                 "AtomicRadius", "CovalentRadius", "ZungerRadius", "IonicRadius", "CrystalRadius",
@@ -52,71 +72,127 @@ if __name__ == '__main__':
                 "CohesiveEnergy"]
     stats = ["maximum", "minimum", "avg_dev", "mean"]
 
+    jobs = [
+            # ["basis1", "basis1", "None"],
+            # ["basis2", "pls", "None"],
+            # ["basis2", "pls", "oversampling"],
+            # ["basis2", "pls", "undersampling"],
+            ["siml", "pls", "None"],
+            # ["basis2", "jpcl", "None"],
+            # ["basis2", "jpcl", "oversampling"],
+            # ["basis2", "jpcl", "undersampling"],
+            # ["siml", "jpcl", "None"],
+            # ["basis2", "siml", "None"],
+            # ["basis2", "siml", "oversampling"],
+            # ["basis2", "siml", "undersampling"],
+            # ["siml", "siml", "None"]
+            ]
+
     # cv_method = "siml"
-    cv_method = "pls"
+    # cv_method = "pls"
     # cv_method = "jpcl"
-    # cv_method = "basis1"
-    # basic_model = "SVR"
-    parameters = dict(C = 10, gamma = 0.01, epsilon = 0.2, eta = 1, tolerance = 0.05, delta = 0.5, nonC = False)
-    # parameters = dict(C = 1033, gamma = 0.01, epsilon = 0.2, eta = 1, tolerance = 0.05, delta = 0.5)
-    # cv.CalSize(data, cv_method)
+    # cv_method = "basis1"  
+    # method = "basis1"
+    # method = "basis2"
+    # method = "siml"
     # sampling_method = "oversampling"
     # sampling_method = "undersampling"
-    sampling_method = "None"
+    # sampling_method = "None"  
+    
+    for data_sheet in data_sheets:
+        path = "/home/lisz/work/SIML/test/"
+        os.chdir(path)
+        data = pd.read_excel("bandgap.xlsx", sheet_name=sheet_names[data_sheet])
+        for job in jobs:
+            method = job[0]
+            cv_method = job[1]
+            sampling_method = job[2]
+        
+            # basic_model = "SVR"
+            # parameters = dict(C = 10, gamma = 0.01, epsilon = 0.2, eta = 1, tolerance = 0.005, delta = 0.5, nonC = False, parallel=True, n_jobs=50) # With C optimization
+            # parameters = dict(C=10, gamma=0.01, epsilon=0.2, eta=1, tolerance=0.005, delta=0.5, nonC=False, parallel=False, n_jobs=50, nonOrder=True) # With C optimization
+            # parameters = dict(C=10, gamma=0.01, epsilon=0.2, eta=1, tolerance=0.005, delta=0.1, nonC=False, parallel=False, n_jobs=50, nonOrder=True) # With C optimization
+            # parameters = dict(C=10, gamma=0.01, epsilon=0.2, eta=1, tolerance=0.005, delta=0.5, nonC=False, parallel=True, n_jobs=50, nonOrder=False) # 
+            parameters = dict(C=10, gamma=0.01, epsilon=0.2, eta=1, tolerance=0.005, delta=0.5, nonC=False, parallel=True, n_jobs=50, nonOrder=True) # 
+            # parameters = dict(C=10, gamma=0.01, epsilon=0.2, eta=1, tolerance=0.005, delta=0.5, nonC=True, parallel=True, n_jobs=50, nonOrder=False) # 
+            # parameters = dict(C = 10, gamma = 0.01, epsilon = 0.2, eta = 1, tolerance = 0.005, delta = 0.5, nonC = True) # Without  C optimization
+            # parameters = dict(C = 1000, gamma = 0.01, epsilon = 0.2, eta = 1, tolerance = 0.005, delta = 0.5)
+            # cv.CalSize(data, cv_method)
 
-    # plot.PlotBar(data, 0.3, 0.5)
-    # plot.PlotPeriod(data)
-    # plot.PlotCirle(data)
+            # plot.PlotBar(data, 1, 5)
+            # plot.PlotPeriod(data)
+            # plot.PlotCirle(data)
+
+            # data, X, y = MakeFeatures(data, features, stats)
+            # excel_writer = pd.ExcelWriter("bandgap.xlsx", mode="a", engine="openpyxl", if_sheet_exists="replace")
+            # pd.DataFrame(data).to_excel(excel_writer, sheet_name="468")
+            # excel_writer.save()
+
+            data.sort_values(by="Experimental", inplace=True, ascending=True)
+            X = data.iloc[:, 3:].fillna(0).values
+            X = preprocessing.MinMaxScaler().fit_transform(pd.DataFrame(X))  # Normalization
+            y = data.iloc[:, 1].values
+            
+            if sampling_method == "None":
+                filename = method + "_" + cv_method + "_" + str(parameters["epsilon"]) + "_" + str(parameters["C"]) + "_" + data_sheet
+            else:
+                filename = method + "_" + cv_method + "_" + sampling_method + "_" + str(parameters["epsilon"]) + "_" + str(parameters["C"]) + "_" + data_sheet
+
+            # if cv_method == "siml":     
+            directory = path + filename
+            if os.path.exists(directory):
+                os.chdir(directory)
+            else:
+                os.mkdir(directory)
+                os.chdir(directory)
+
+            # cv.CalSize(data, cv_method, sampling_method=sampling_method)
+            split_data = cv.SplitData(data, cv_method, sampling_method=sampling_method)
+
+            start_at = time.time()
+            if method == "basis1":
+                results = PredictOnlyMajor(data, X, y, split_data, parameters)
+            elif method == "basis2":
+                results = PredictWithMinor(data, X, y, split_data, parameters)
+            else:
+                results = SIML(data, X, y, split_data, parameters)
+                # results = SIML(data, X, y, split_data, parameters, "error_descend")
+                # results = SIML(data, X, y, split_data, parameters, "bandgap_ascend")
+                # results = SIML(data, X, y, split_data, parameters, "bandgap_descend")
+            end_at = time.time()
+            print('%s used %s s' % (filename, (end_at - start_at)))
+
+            summarys = AnalysisResults(results, method)
+            metrics = AnalysisSummarys(summarys)
+        
+            SaveMetrics(metrics, "summary_" + filename + ".xlsx")                               
+            SaveResults(results, "summary_" + filename + ".xlsx")
+            # SaveMetrics(metrics, "summary_basis1_0.2_3895.xlsx")
+            # SaveMetrics(metrics, "summary_basis2_pls_0.2_3895.xlsx")
+            # SaveMetrics(metrics, "summary_basis2_pls_oversampling_0.2_3895.xlsx")
+            # SaveMetrics(metrics, "summary_basis2_pls_undersampling_0.2_3895.xlsx")
+            # SaveMetrics(metrics, "summary_basis2_siml_oversampling_0.2_1033.xlsx")
+            # SaveMetrics(metrics, "summary_basis2_siml_undersampling_0.2.xlsx")
+            # SaveMetrics(metrics, "summary_siml_pls_0.2_468_LDA.xlsx")
+            # SaveMetrics(metrics, "summary_siml_pls_0.2_468_PBE.xlsx")
+            # SaveMetrics(metrics, "summary_siml_pls_0.2_468_SCAN.xlsx")
+            # SaveMetrics(metrics, "summary_siml_pls_0.2_468_HSE06.xlsx")
+            # SaveMetrics(metrics, "summary_siml_pls_0.2_468_HSE06_mix.xlsx")
+            # SaveMetrics(metrics, "summary_siml_siml_0.2_nonC.xlsx")
+            # SaveMetrics(metrics, "summary_siml_siml_0.2_error_descend.xlsx")
+            # SaveMetrics(metrics, "summary_siml_siml_0.2_bandgap_ascend.xlsx")
+            # SaveMetrics(metrics, "summary_siml_siml_0.2_bandgap_descend.xlsx")
 
 
-    # data, X, y = MakeFeatures(data, features, stats)
-    # excel_writer = pd.ExcelWriter("bandgap.xlsx", mode="a", engine="openpyxl", if_sheet_exists="replace")
-    # pd.DataFrame(data).to_excel(excel_writer, sheet_name="468")
-    # excel_writer.save()
+            # a_list = np.array(results).tolist()
+            # WriteList(a_list)
 
-    X = data.iloc[:, 3:].fillna(0).values
-    X = preprocessing.MinMaxScaler().fit_transform(pd.DataFrame(X))  # Normalization
-    y = data.iloc[:, 1].values
+            plot.PlotPrediction(results[2], method, filename)
+            # plot.PlotPredictionMAPE(results[2])
+            # plot.OldPlotPredictionMAPE(results[2])
+            # plot.PlotPredictionError(results[2])
+            # plot.OldPlotPredictionError(results[2])
+            # fig = px.scatter(x=results[0][1], y=results[0][2])
+            # fig.show()
 
-    cv.CalSize(data, cv_method, sampling_method=sampling_method)
-    split_data = cv.SplitData(data, cv_method, sampling_method=sampling_method)
-
-    # results = PredictOnlyMajor(data, X, y, split_data, parameters)
-    # results = PredictWithMinor(data, X, y, split_data, parameters)
-    results = SIML(data, X, y, split_data, parameters)
-    # results = SIML(data, X, y, split_data, parameters, "error_descend")
-    # results = SIML(data, X, y, split_data, parameters, "bandgap_ascend")
-    # results = SIML(data, X, y, split_data, parameters, "bandgap_descend")
-    # df = px.data.gapminder()
-    # app.run_server(debug=True)
-
-    # summarys = AnalysisResults(results, "basis1")
-    # summarys = AnalysisResults(results, "basis2")
-    summarys = AnalysisResults(results, "siml")
-    metrics = AnalysisSummarys(summarys)
-    # SaveMetrics(metrics, "summary_basis1_0.2_3895.xlsx")
-    # SaveMetrics(metrics, "summary_basis2_pls_0.2_3895.xlsx")
-    # SaveMetrics(metrics, "summary_basis2_pls_oversampling_0.2_3895.xlsx")
-    # SaveMetrics(metrics, "summary_basis2_pls_undersampling_0.2_3895.xlsx")
-    # SaveMetrics(metrics, "summary_basis2_siml_oversampling_0.2_1033.xlsx")
-    # SaveMetrics(metrics, "summary_basis2_siml_undersampling_0.2.xlsx")
-    SaveMetrics(metrics, "summary_siml_pls_0.2_3895.xlsx")
-    # SaveMetrics(metrics, "summary_siml_siml_0.2_nonC.xlsx")
-    # SaveMetrics(metrics, "summary_siml_siml_0.2_error_descend.xlsx")
-    # SaveMetrics(metrics, "summary_siml_siml_0.2_bandgap_ascend.xlsx")
-    # SaveMetrics(metrics, "summary_siml_siml_0.2_bandgap_descend.xlsx")
-
-
-    # a_list = np.array(results).tolist()
-    # WriteList(a_list)
-
-    plot.PlotPrediction(results[2])
-    # plot.PlotPredictionMAPE(results[2])
-    # plot.OldPlotPredictionMAPE(results[2])
-    # plot.PlotPredictionError(results[2])
-    # plot.OldPlotPredictionError(results[2])
-    # fig = px.scatter(x=results[0][1], y=results[0][2])
-    # fig.show()
-
-    # RealResults(data, results)
-    print("OK")
+            print(filename + ": OK")

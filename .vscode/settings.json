@@ -1,0 +1,10 @@
+{
+    "python.linting.pylintEnabled": true,
+    "python.linting.enabled": true,
+    "python.linting.pylintArgs": [
+        "--errors-only",
+        "--disable=E0401"
+    ],
+    "editor.bracketPairColorization.enabled": true,
+    "editor.guides.bracketPairs":"active"
+}

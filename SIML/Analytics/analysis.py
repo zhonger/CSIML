@@ -2,7 +2,9 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import mean_absolute_error, mean_absolute_percentage_error, mean_squared_error, \
     median_absolute_error, r2_score
-
+from tqdm import tqdm
+from joblib import Parallel, delayed
+import os.path
 
 def Evaluation(y: np.array, y_pred: np.array):
     error = abs(y - y_pred)
@@ -155,9 +157,37 @@ def SaveMetrics(metrics: list, csvfile: str="summary.xlsx"):
     print_metrics = pd.DataFrame(print_metrics).T
     print_metrics.to_excel(csvfile, sheet_name="summary", header=header, index=None)
 
+
 def RealResults(data: pd.DataFrame, name_index: list):
     df = pd.DataFrame(data.iloc[:, 0])
     name = pd.DataFrame(df.iloc[name_index, :].reset_index(drop=True)).T
     name = name.to_numpy().flatten()
 
     return name
+
+
+def SaveResult(results: pd.DataFrame, filename: str, iteration: int=0):
+    for i in range(len(results)):
+        result = pd.DataFrame(results[i]).T
+        if os.path.exists(filename):
+            writer = pd.ExcelWriter(path=filename, mode="a", if_sheet_exists="replace")
+        else:
+            writer = pd.ExcelWriter(path=filename, mode="w")
+        result.to_excel(excel_writer=writer, sheet_name="iteration-"+str(iteration*25+i), header=None, index=None)    
+        writer.save()
+    return True
+
+
+def SaveResults(results: pd.DataFrame, filename: str):
+    iterations = len(results)
+    if iterations > 25:
+        filename = filename[:-5]
+        outs = (
+            Parallel(n_jobs=25)
+            (delayed(SaveResult)(results[i:i+25], filename+"_"+str(i)+".xlsx", i)
+            for i in tqdm(range(int(iterations/25))))
+        )
+    else:    
+        SaveResult(results, filename)
+    print("Save all results into excel files successfully.")
+        

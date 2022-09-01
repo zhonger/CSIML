@@ -1,3 +1,4 @@
+from fileinput import filename
 import math
 
 import matplotlib as mpl
@@ -307,7 +308,7 @@ def PlotCirle(data: pd.DataFrame, level1: float = 3, level2: float = 5):
     plt.show()
 
 
-def PlotPrediction(result: np.array):
+def PlotPrediction(result: np.array, method: str, filename: str="Prediction"):
     names1 = ["Train (Majority)", "Validation (Majority)", "Test (Majority)", "Test (Minority)"]
     names2 = ["Train (Majority)", "Validation (Majority)", "Test (Majority)", "Train (Minority)",
               "Validation (Minority)", "Test (Minority)"]
@@ -324,16 +325,16 @@ def PlotPrediction(result: np.array):
                              name="0.5 eV"))
     fig.add_trace(go.Scatter(x=[-3, 16], y=[-3, 16], marker_color="red", line_dash="dash", name="Best line"))
 
-    length = int(len(result) / 3)
+    length = 6 if int(len(result)/3) > 6 else int(len(result)/3)
 
-    match length:
-        case 4:
+    match method:
+        case "basis1":
             names = names1
-            title = "Basis 1 - SVR (rbf)"
-        case 6:
+        case _:
             names = names2
-            title = "Basis 2 - SVR (rbf)"
-
+        
+    title = filename
+            
     for i in range(length):
         fig.add_trace(
             go.Scatter(x=result[1 + 3 * i], y=result[2 + 3 * i], hovertext=result[3 * i], mode="markers",
@@ -353,7 +354,8 @@ def PlotPrediction(result: np.array):
                       template="simple_white", xaxis_range=[0, 15], yaxis_range=[0, 15], xaxis_title_font_size=24,
                       yaxis_title_font_size=24, xaxis_linewidth=3, yaxis_linewidth=3, xaxis_tickfont_size=20,
                       yaxis_tickfont_size=20)
-    fig.show()
+    # fig.show()
+    fig.write_html(filename + ".html")
 
 
 def PlotPredictionError(result: np.array):
