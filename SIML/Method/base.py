@@ -193,7 +193,7 @@ def TrainModel(regr, X_train, y_train, sample_weights):
     return regr, error, mae, variance, rmse, mape, r2, std
 
 
-def TestError(regr, X_test, y_test, test, method: str="error_ascend"):
+def TestError(regr, X_test, y_test, test, method: str="O1"):
     """
 
     :param regr:
@@ -207,13 +207,13 @@ def TestError(regr, X_test, y_test, test, method: str="error_ascend"):
     test_error = y_pred - y_test
 
     match method:
-        case "error_ascend":
+        case "O1": # error_ascend
             index = np.argmin(abs(test_error))
-        case "error_descend":
+        case "O2": # error_descend
             index = np.argmax(abs(test_error))
-        case "bandgap_ascend":
+        case "O3": # bandgap_ascend
             index = np.argmin(y_test)
-        case "bandgap_descend":
+        case "O4": # bandgap_descend
             index = np.argmax(y_test)
 
     return index, test[index], y_pred[index]
@@ -243,7 +243,7 @@ def LearningRate(error, min_error, step, ranges, multiples):
     return delta
 
 
-def SIMLP(data: pd.DataFrame, X: np.array, y: np.array, split_data: list, n: int, parameters: list, op_method: str="error_ascend"):
+def SIMLP(data: pd.DataFrame, X: np.array, y: np.array, split_data: list, n: int, parameters: list):
     epsilon, gamma, C, delta, eta, tolerance = (
         parameters["epsilon"],
         parameters["gamma"],
@@ -252,6 +252,11 @@ def SIMLP(data: pd.DataFrame, X: np.array, y: np.array, split_data: list, n: int
         parameters["eta"],
         parameters["tolerance"]
     )
+    
+    if parameters["op_method"]:
+        op_method = parameters["op_method"]
+    else:
+        op_method = "O1"
         
     majority_train_set = split_data[n - 1][0]
     majority_validation_set = split_data[n - 1][1]
@@ -322,11 +327,18 @@ def SIMLP(data: pd.DataFrame, X: np.array, y: np.array, split_data: list, n: int
                                                                                                                 y_train,
                                                                                                                 sample_weights)
             error = abs(y_best - regr.predict(X_best.reshape(1, -1)))
-            mae = (np.sum(train_error) + coefs[epoch] * error) / len(train)
+            if parameters['wMAE']:
+                mae = (np.sum(train_error) + coefs[epoch] * error) / len(train)
+            else:
+                mae = (np.sum(train_error) + error) / len(train)
 
             if not (parameters['nonC'] or parameters["nonOrder"]):
                 if error == old_error and j == 1:
                     sys.exit(1)
+                    
+                if parameters['tolerance2']:
+                    tolerance2 = parameters['tolerance2']
+                    limit = round(epsilon + tolerance2, 6)
 
                 j = 0
                 while mae > limit:
@@ -337,7 +349,10 @@ def SIMLP(data: pd.DataFrame, X: np.array, y: np.array, split_data: list, n: int
                     regr, train_error, train_mae, train_var, train_rmse, train_mape, train_r2, train_std = TrainModel(
                         regr, X_train, y_train, sample_weights)
                     error = abs(y_best - regr.predict(X_best.reshape(1, -1)))
-                    mae = (np.sum(train_error) + coefs[epoch] * error) / len(train)
+                    if parameters['wMAE']:
+                        mae = (np.sum(train_error) + coefs[epoch] * error) / len(train)
+                    else:
+                        mae = (np.sum(train_error) + error) / len(train)
 
                     if mae > limit:
                         if mae == old_mae and j > 0:
@@ -351,7 +366,10 @@ def SIMLP(data: pd.DataFrame, X: np.array, y: np.array, split_data: list, n: int
             #         sys.exit(1)
 
         if error <= limit:
-            mae = (np.sum(train_error) + coefs[epoch] * error) / len(train)
+            if parameters['wMAE']:
+                mae = (np.sum(train_error) + coefs[epoch] * error) / len(train)
+            else:
+                mae = (np.sum(train_error) + error) / len(train)
             sample_weights[len(train) - 1] = coefs[epoch]
             # print("Finish %s - %s" % (n, epoch))
             pbar.update(1)
@@ -360,6 +378,10 @@ def SIMLP(data: pd.DataFrame, X: np.array, y: np.array, split_data: list, n: int
         if error == old_error and j == 1:
             sys.exit(1)
 
+        if parameters['tolerance2']:
+            tolerance2 = parameters['tolerance2']
+            limit = round(epsilon + tolerance2, 6)
+            
         j = 0
         while mae > limit:
 
@@ -369,7 +391,10 @@ def SIMLP(data: pd.DataFrame, X: np.array, y: np.array, split_data: list, n: int
             regr, train_error, train_mae, train_var, train_rmse, train_mape, train_r2, train_std = TrainModel(
                 regr, X_train, y_train, sample_weights)
             error = abs(y_best - regr.predict(X_best.reshape(1, -1)))
-            mae = (np.sum(train_error) + coefs[epoch] * error) / len(train)
+            if parameters['wMAE']:
+                mae = (np.sum(train_error) + coefs[epoch] * error) / len(train)
+            else:
+                mae = (np.sum(train_error) + error) / len(train)
 
             if mae > limit:
                 if mae == old_mae and j > 0:
@@ -425,7 +450,7 @@ def SIMLP(data: pd.DataFrame, X: np.array, y: np.array, split_data: list, n: int
     return result
 
 
-def SIML(data: pd.DataFrame, X: np.array, y: np.array, split_data: list, parameters: list, op_method: str="error_ascend"):
+def SIML(data: pd.DataFrame, X: np.array, y: np.array, split_data: list, parameters: list):
 
     iterations = split_data.__len__()
     results = []
@@ -433,12 +458,12 @@ def SIML(data: pd.DataFrame, X: np.array, y: np.array, split_data: list, paramet
     if parameters["parallel"]:
         results = (
             Parallel(n_jobs=parameters["n_jobs"])
-            (delayed(SIMLP)(data, X, y, split_data, n, parameters, op_method)
+            (delayed(SIMLP)(data, X, y, split_data, n, parameters)
              for n in tqdm(range(iterations)))
         )
     else:
         for n in range(1, len(split_data)+1, 1):
-            result = SIMLP(data, X, y, split_data, n, parameters, op_method)
+            result = SIMLP(data, X, y, split_data, n, parameters)
             results.append(result)
 
     return results
