@@ -12,3 +12,4 @@ plotly
 dash
 jupyter-dash
 imblearn
+physbo
