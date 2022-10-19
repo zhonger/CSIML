@@ -154,6 +154,9 @@ def Predict(data: pd.DataFrame, X: pd.DataFrame, y: pd.DataFrame, df: pd.DataFra
     counts = Counter(df[3])
     result.append(RealResults(data, list(counts.keys())))
     result.append(counts.values())
+    
+    result.append(list(parameters.keys()))
+    result.append(list(parameters.values()))
 
     return result
             
@@ -450,20 +453,124 @@ def SIMLP(data: pd.DataFrame, X: np.array, y: np.array, split_data: list, n: int
     return result
 
 
+def SIMLT(data: pd.DataFrame, X: np.array, y: np.array, split_data:list, n: int, parameters: list):
+    epsilon, gamma, C, delta, eta, tolerance = (
+        parameters["epsilon"],
+        parameters["gamma"],
+        parameters["C"],
+        parameters["delta"],
+        parameters["eta"],
+        parameters["tolerance"]
+    )
+    
+    majority_train_set = split_data[n - 1][0]
+    majority_validation_set = split_data[n - 1][1]
+    majority_test_set = split_data[n - 1][2]
+    minority_train_set = split_data[n - 1][3]
+    minority_validation_set = split_data[n - 1][4]
+    minority_test_set = split_data[n - 1][5]
+
+    majority_train_size = majority_train_set.shape[0]
+    minority_train_size = minority_train_set.shape[0]
+    majority_validation_size = majority_validation_set.shape[0]
+    minority_validation_size = minority_validation_set.shape[0]
+    majority_test_size = majority_test_set.shape[0]
+    minority_test_size = minority_test_set.shape[0]
+    # debug = self.debug
+
+    train = majority_train_set
+    validation = np.append(majority_validation_set, minority_validation_set)
+    test = np.append(majority_test_set, minority_test_set)
+
+    minority_train_num = len(minority_train_set)
+    sample_weights = np.ones(len(train), dtype=float)
+    coefs = np.ones(minority_train_num, dtype=float)
+    minority_train_bak = minority_train_set
+
+    regr = SVR(kernel="rbf", epsilon=epsilon, C=C, gamma=gamma)
+    
+    pbar = tqdm(total=minority_train_num)
+    pbar.set_description("SIMLT (iteration %s)" % n)
+    
+    for epoch in range(minority_train_num):
+        best = minority_train_set[epoch]
+        X_train = X[train, :]
+        y_train = y[train]
+        X_best = X[best, :]
+        y_best = y[best]
+        sample_weights2 = np.append(sample_weights, coefs[epoch])
+        
+        regr = regr.fit(X_train, y_train, sample_weights)
+        y_pred = regr.predict(X_best.reshape(1, -1))
+        error = abs(y_pred - y_best)
+    
+        train2 = np.append(train, best)
+        X_train = X[train2, :]
+        y_train = y[train2]
+        
+        limit = round(epsilon + tolerance, 6)
+        ranges1 = [i * limit for i in list(range(5,0,-1))]
+        multiples1 = list(range(5,0,-1))
+        
+        while error > limit:
+
+            old_error = error
+            
+            delta = LearningRate(error, limit, parameters["delta"], ranges1, multiples1)
+            coefs[epoch] = round(coefs[epoch] + delta, 2)
+            sample_weights2[len(train)] = coefs[epoch]
+            
+            regr, train_error, train_mae, train_var, train_rmse, train_mape, train_r2, train_std = TrainModel(regr,
+                                                                                                                X_train,
+                                                                                                                y_train,
+                                                                                                                sample_weights2)
+            error = abs(y_best - regr.predict(X_best.reshape(1, -1)))
+        pbar.update(1)
+        
+    result = []
+    keys = RealResults(data, minority_train_set)
+    values = coefs
+    result.append(minority_train_set)
+    result.append(y[minority_train_set])
+    result.append(keys)
+    result.append(values)
+
+    parameters["C"] = C
+    result.append(list(parameters.keys()))
+    result.append(list(parameters.values()))
+    
+    return result
+              
+
 def SIML(data: pd.DataFrame, X: np.array, y: np.array, split_data: list, parameters: list):
 
     iterations = split_data.__len__()
     results = []
 
-    if parameters["parallel"]:
-        results = (
-            Parallel(n_jobs=parameters["n_jobs"])
-            (delayed(SIMLP)(data, X, y, split_data, n, parameters)
-             for n in tqdm(range(iterations)))
-        )
-    else:
-        for n in range(1, len(split_data)+1, 1):
-            result = SIMLP(data, X, y, split_data, n, parameters)
-            results.append(result)
+    match parameters["wb"]:
+        case True:
+            if parameters["parallel"]:
+                        results = (
+                            Parallel(n_jobs=parameters["n_jobs"])
+                            (delayed(SIMLT)(data, X, y, split_data, n, parameters)
+                            for n in tqdm(range(iterations)))
+                        )
+            else:
+                for n in range(1, len(split_data)+1, 1):
+                    result = SIMLT(data, X, y, split_data, n, parameters)
+                    results.append(result)
+        case _:
+            if parameters["parallel"]:
+                        results = (
+                            Parallel(n_jobs=parameters["n_jobs"])
+                            (delayed(SIMLP)(data, X, y, split_data, n, parameters)
+                            for n in tqdm(range(iterations)))
+                        )
+            else:
+                for n in range(1, len(split_data)+1, 1):
+                    result = SIMLP(data, X, y, split_data, n, parameters)
+                    results.append(result)
 
     return results
+    
+    

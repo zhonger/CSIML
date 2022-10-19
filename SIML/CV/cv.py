@@ -1,5 +1,5 @@
 import math
-from random import sample
+from random import seed,sample
 
 import numpy as np
 import pandas as pd
@@ -107,6 +107,8 @@ def CalSize(data: pd.DataFrame, cv_method: str, sampling_method: str = "None" ,m
         minority_size["Train"] = str(majority_size["Train"]) + "(" + str(minority_size["Train"]) +")"
 
     PrintSize(majority_size, minority_size)
+    
+    return majority_size, minority_size
 
 
 def SplitData(data: pd.DataFrame, cv_method: str, sampling_method: str = "None", majority_pro: float = 0.2, minority_pro: float = 0.2,
@@ -132,16 +134,19 @@ def SplitData(data: pd.DataFrame, cv_method: str, sampling_method: str = "None",
 
     match cv_method:
         case "siml":
-            split_data = SplitDataSIML(data, majority_set, minority_set, sampling_method=sampling_method)
+            split_data = SplitDataSIML(data, majority_set, minority_set, random_state=random_state, sampling_method=sampling_method)
 
         case "pls":
-            split_data = SplitDataKFoldCV(data, majority_set, minority_set, sampling_method=sampling_method)
+            split_data = SplitDataKFoldCV(data, majority_set, minority_set, random_state=random_state, sampling_method=sampling_method)
 
         case "jpcl":
-            split_data = SplitDataKFoldCV(data, majority_set, minority_set, 5, sampling_method=sampling_method)
+            split_data = SplitDataKFoldCV(data, majority_set, minority_set, 5, random_state=random_state, sampling_method=sampling_method)
 
         case "basis1":
-            split_data = SplitDataBasis(majority_set, minority_set)
+            split_data = SplitDataBasis(majority_set, minority_set, random_state=random_state)
+            
+        case "op":
+            split_data = SplitDataOPKFoldCV(data, majority_set, minority_set, random_state=random_state, sampling_method=sampling_method)
 
     print("Split data: OK")
 
@@ -243,7 +248,7 @@ def SplitDataBasis(majority_set: np.array, minority_set: np.array, majority_test
     return split_data
 
 
-def SplitDataKFoldCV(data: pd.DataFrame, majority_set: np.array, minority_set: np.array, fold: int = 10, sampling_method: str = "None"):
+def SplitDataKFoldCV(data: pd.DataFrame, majority_set: np.array, minority_set: np.array, fold: int = 10, random_state: int = 3, sampling_method: str = "None"):
     """
 
     :param majority_set: majority instances indexes
@@ -270,7 +275,7 @@ def SplitDataKFoldCV(data: pd.DataFrame, majority_set: np.array, minority_set: n
             train = np.append(majority_train_set, minority_train_set)
             c = y[train] <= 5
             train = train[:, np.newaxis]
-            train_resample, c = OverSampling(train, c)
+            train_resample, c = OverSampling(train, c, random_state=random_state)
             train_resample = train_resample.flatten()
             minority_train_set = train_resample[len(majority_train_set):]
         elif sampling_method == "undersampling":
@@ -278,7 +283,78 @@ def SplitDataKFoldCV(data: pd.DataFrame, majority_set: np.array, minority_set: n
             train = np.append(majority_train_set, minority_train_set)
             c = y[train] <= 5
             train = train[:, np.newaxis]
-            train_resample, c = UnderSampling(train, c)
+            train_resample, c = UnderSampling(train, c, random_state=random_state)
+            train_resample = train_resample.flatten()
+            majority_train_set = train_resample[len(minority_train_set):]
+
+        cv_data.append(majority_train_set)
+        cv_data.append(majority_validation_set)
+        cv_data.append(majority_test_set)
+        cv_data.append(minority_train_set)
+        cv_data.append(minority_validation_set)
+        cv_data.append(minority_test_set)
+
+        split_data.append(cv_data)
+
+    return split_data
+
+
+def SplitDataOPKFoldCV(data: pd.DataFrame, majority_set: np.array, minority_set: np.array, fold: int = 10, random_state: int = 3,  sampling_method: str = "None"):
+    """_summary_
+
+    Args:
+        data (pd.DataFrame): _description_
+        majority_set (np.array): _description_
+        minority_set (np.array): _description_
+        fold (int, optional): _description_. Defaults to 10.
+        sampling_method (str, optional): _description_. Defaults to "None".
+
+    Returns:
+        _type_: _description_
+    """
+    split_data = []
+
+    # Obtain test_set for majority and minority
+    seed(a=random_state)
+    # seed(a=10)
+    # seed(a=30)
+    majority_pro = round(1/fold, 1)
+    minority_pro = round(1/fold, 1)
+    majority_size, minority_size = CalSize(data, "siml", majority_pro=majority_pro, minority_pro=minority_pro)
+    majority_test_set = sample(list(majority_set), majority_size["Test"])
+    majority_set = np.array(list(set(majority_set) - set(majority_test_set)))
+    minority_test_set = sample(list(minority_set), minority_size["Test"])
+    minority_set = np.array(list(set(minority_set) - set(minority_test_set)))
+    majority_test_set = np.array(majority_test_set)
+    minority_test_set = np.array(minority_test_set)
+    
+    # Obtain training_set and validation_set for majority and minority
+    for i in range(fold):
+        cv_data = []
+
+        majority_indexes = np.arange(majority_set.shape[0])
+        majority_validation_indexes = (majority_indexes % fold == i)
+        majority_validation_set = majority_set[majority_validation_indexes]
+        majority_train_set = np.delete(majority_set, majority_validation_indexes)
+        minority_indexes = np.arange(minority_set.shape[0])
+        minority_validation_indexes = (minority_indexes % fold == i)
+        minority_validation_set = minority_set[minority_validation_indexes]
+        minority_train_set = np.delete(minority_set, minority_validation_indexes)
+
+        if sampling_method == "oversampling":
+            y = data.iloc[:, 1].values
+            train = np.append(majority_train_set, minority_train_set)
+            c = y[train] <= 5
+            train = train[:, np.newaxis]
+            train_resample, c = OverSampling(train, c, random_state)
+            train_resample = train_resample.flatten()
+            minority_train_set = train_resample[len(majority_train_set):]
+        elif sampling_method == "undersampling":
+            y = data.iloc[:, 1].values
+            train = np.append(majority_train_set, minority_train_set)
+            c = y[train] <= 5
+            train = train[:, np.newaxis]
+            train_resample, c = UnderSampling(train, c, random_state)
             train_resample = train_resample.flatten()
             majority_train_set = train_resample[len(minority_train_set):]
 
