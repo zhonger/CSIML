@@ -192,31 +192,28 @@ def SaveHyperparameterMetrics(op_results: np.array, op_object: str = "C", filena
     minority_rmse_results = op_metrics.iloc[op_metrics.groupby("iteration")["test_minority_rmse"].idxmin()].loc[:, select_columns]
 
     # Write metrics to excel
-    writer = pd.ExcelWriter(filename)
-    op_metrics.to_excel(excel_writer=writer, sheet_name="op_metrics")   
+    with pd.ExcelWriter(filename) as writer:
+        op_metrics.to_excel(excel_writer=writer, sheet_name="op_metrics")   
     
-    total_mae_results.to_excel(excel_writer=writer, sheet_name="by_total_mae")   
-    majority_mae_results.to_excel(excel_writer=writer, sheet_name="by_majoritiy_mae")   
-    minority_mae_results.to_excel(excel_writer=writer, sheet_name="by_minority_mae")  
-    total_mae_results.insert(0, "by", "total_mae")
-    majority_mae_results.insert(0, "by", "majority_mae")
-    minority_mae_results.insert(0, "by", "minority_mae")
-    summary = pd.concat([total_mae_results, majority_mae_results, minority_mae_results])
-    summary = summary.sort_values(by=["iteration", "by"], ascending=(True, True)) 
-    summary.to_excel(excel_writer=writer, sheet_name="summary_mae")
-            
-    total_rmse_results.to_excel(excel_writer=writer, sheet_name="by_total_rmse")   
-    majority_rmse_results.to_excel(excel_writer=writer, sheet_name="by_majoritiy_rmse")   
-    minority_rmse_results.to_excel(excel_writer=writer, sheet_name="by_minority_rmse")  
-    total_rmse_results.insert(0, "by", "total_rmse")
-    majority_rmse_results.insert(0, "by", "majority_rmse")
-    minority_rmse_results.insert(0, "by", "minority_rmse")
-    summary = pd.concat([total_rmse_results, majority_rmse_results, minority_rmse_results])
-    summary = summary.sort_values(by=["iteration", "by"], ascending=(True, True)) 
-    summary.to_excel(excel_writer=writer, sheet_name="summary_rmse")
-    
-    writer.save()
-    writer.close()
+        total_mae_results.to_excel(excel_writer=writer, sheet_name="by_total_mae")   
+        majority_mae_results.to_excel(excel_writer=writer, sheet_name="by_majoritiy_mae")   
+        minority_mae_results.to_excel(excel_writer=writer, sheet_name="by_minority_mae")  
+        total_mae_results.insert(0, "by", "total_mae")
+        majority_mae_results.insert(0, "by", "majority_mae")
+        minority_mae_results.insert(0, "by", "minority_mae")
+        summary = pd.concat([total_mae_results, majority_mae_results, minority_mae_results])
+        summary = summary.sort_values(by=["iteration", "by"], ascending=(True, True)) 
+        summary.to_excel(excel_writer=writer, sheet_name="summary_mae")
+                
+        total_rmse_results.to_excel(excel_writer=writer, sheet_name="by_total_rmse")   
+        majority_rmse_results.to_excel(excel_writer=writer, sheet_name="by_majoritiy_rmse")   
+        minority_rmse_results.to_excel(excel_writer=writer, sheet_name="by_minority_rmse")  
+        total_rmse_results.insert(0, "by", "total_rmse")
+        majority_rmse_results.insert(0, "by", "majority_rmse")
+        minority_rmse_results.insert(0, "by", "minority_rmse")
+        summary = pd.concat([total_rmse_results, majority_rmse_results, minority_rmse_results])
+        summary = summary.sort_values(by=["iteration", "by"], ascending=(True, True)) 
+        summary.to_excel(excel_writer=writer, sheet_name="summary_rmse")
 
     return op_metrics
 
@@ -277,7 +274,8 @@ def SaveMetrics(metrics: list, csvfile: str="summary.xlsx"):
 
     header = ["Training", "Validation", "Test"]
     print_metrics = pd.DataFrame(print_metrics).T
-    print_metrics.to_excel(csvfile, sheet_name="summary", header=header, index=None)
+    with pd.ExcelWriter(csvfile) as writer:
+        print_metrics.to_excel(excel_writer=writer, sheet_name="summary", header=header, index=None)
 
 
 def RealResults(data: pd.DataFrame, name_index: list):
@@ -292,11 +290,11 @@ def SaveResult(results: pd.DataFrame, filename: str, iteration: int=0, header=No
     for i in range(len(results)):
         result = pd.DataFrame(results[i]).T
         if os.path.exists(filename):
-            writer = pd.ExcelWriter(path=filename, mode="a", if_sheet_exists="replace")
+            with pd.ExcelWriter(path=filename, mode="a", if_sheet_exists="replace") as writer:
+                result.to_excel(excel_writer=writer, sheet_name="iteration-"+str(iteration*25+i), header=header, index=index)   
         else:
-            writer = pd.ExcelWriter(path=filename, mode="w")
-        result.to_excel(excel_writer=writer, sheet_name="iteration-"+str(iteration*25+i), header=header, index=index)    
-        writer.save()
+            with pd.ExcelWriter(path=filename, mode="w") as writer:
+                result.to_excel(excel_writer=writer, sheet_name="iteration-"+str(iteration*25+i), header=header, index=index)    
     return True
 
 
@@ -371,11 +369,11 @@ def SaveAnalyzedResult(results: pd.DataFrame, filename: str, iteration: int=0):
     for i in range(len(results)):
         result = pd.DataFrame(results[i])
         if os.path.exists(filename):
-            writer = pd.ExcelWriter(path=filename, mode="a", if_sheet_exists="replace")
+            with pd.ExcelWriter(path=filename, mode="a", if_sheet_exists="replace") as writer:
+                result.to_excel(excel_writer=writer, sheet_name="iteration-"+str(iteration*25+i), index=None) 
         else:
-            writer = pd.ExcelWriter(path=filename, mode="w")
-        result.to_excel(excel_writer=writer, sheet_name="iteration-"+str(iteration*25+i), index=None)    
-        writer.save()
+            with pd.ExcelWriter(path=filename, mode="w") as writer:
+                result.to_excel(excel_writer=writer, sheet_name="iteration-"+str(iteration*25+i), index=None) 
     return True
 
 def AnalysisCosts(siml_results: pd.DataFrame, results: pd.DataFrame, filename: str="costs.xlsx"):
