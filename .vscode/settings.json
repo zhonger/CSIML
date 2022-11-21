@@ -6,5 +6,48 @@
         "--disable=E0401"
     ],
     "editor.bracketPairColorization.enabled": true,
-    "editor.guides.bracketPairs":"active"
+    "editor.guides.bracketPairs": "active",
+    "editor.formatOnSave": true,
+    "html.format.maxPreserveNewLines": 80,
+    "editor.rulers": [
+        80
+    ],
+    // yapf
+    "python.formatting.provider": "yapf",
+    "python.formatting.yapfArgs": [
+        "--style={based_on_style: pep8, indent_width: 4, column_limit: 80}"
+    ],
+    "editor.fontFamily": "Menlo, Lucida Sans Typewriter, Hack, Source Code Pro, Fira Code, Anonymous Pro, Monaco, 'Courier New', monospace",
+    "editor.fontSize": 14,
+    "editor.semanticTokenColorCustomizations": {
+        "enabled": true,
+        "rules": {
+            "selfParameter": "#ff0000",
+            // "variable": "#095bf4",
+            "comment": "#898787",
+            "property": "#1f9285",
+            "variable.declaration": {
+                "foreground": "#2d6d89",
+                "fontStyle": "italic",
+            },
+            "function.declaration": {
+                "fontStyle": "bold"
+            },
+            "class": {
+                "bold": true,
+            },
+            "method": {
+                "fontStyle": "bold",
+                // "foreground": "#ff0000"
+            },
+            // "function": "#ff0000"
+        }
+    },
+    "editor.tokenColorCustomizations": {
+        "keywords": {
+            "fontStyle": "bold",
+            "foreground": "#191919"
+        },
+        // "variables": "#FF0000"
+    }
 }
