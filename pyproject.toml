@@ -1,3 +1,35 @@
-[build]
-requires = ["setuptools", "setuptools_scm"]
-build-backend = "setuptools.build_meta"
+[tool.poetry]
+name = "SIML"
+version = "0.1.0"
+description = "A library for studying small and imbalanced materials datasets"
+authors = ["Li Shengzhou <s2036012@s.tsukuba.ac.jp>"]
+license = "MIT"
+readme = "README.md"
+homepage = "https://github.com/zhonger/SIML"
+repository = "https://github.com/zhonger/SIML"
+documentation = "https://siml.readthedoc.io"
+packages = [
+    { include = "SIML", from = "."}
+]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+mendeleev = "0.10.0"
+scikit-learn = "1.1.1"
+scikit-learn-intelex = "2023.1.1"
+pandas = "1.4.3"
+numpy = "1.23.1"
+matplotlib = "3.5.2"
+plotly = "5.9.0"
+seaborn = "0.12.2"
+tabulate = "0.8.10"
+
+[tool.poetry.group.dev.dependencies]
+poetry = "1.5.1"
+Sphinx = "7.0.1"
+furo = "2023.5.20"
+sphinx-copybutton = "0.5.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

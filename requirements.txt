@@ -12,4 +12,6 @@ plotly
 dash
 jupyter-dash
 imblearn
-physbo
+numba
+scikit-learn-intel
+mpi4py

@@ -1,0 +1,7 @@
+poetry
+Sphinx
+sphinx-copybutton
+furo
+myst-parser
+sphinx-inline-tabs
+sphinx_design
