@@ -177,12 +177,26 @@ class SIML(DatasetSize):
             self.limit = round(self.parameters["epsilon"] + tolerance, 6)
         else:
             self.limit = round(0.1 + tolerance, 6)
+        parameters = dict(self.parameters)
+        match basic_model := self.basic_model:
+            case "DT":
+                regr = DecisionTreeRegressor(max_depth=10)
+            case "RF":
+                regr = RandomForestRegressor(n_estimators=10)
+            case _:  # Default model is SVR
+                regr = SVR(kernel="rbf", C=10)
 
-    def fit_predict(self) -> list:
+        if parameters is not None:
+            for key, value in parameters.items():
+                regr.__setattr__(key, value)
+
+        self.regr = regr
+
+    def fit_predict(self, **kws) -> list:
         """Fit ML models with data and settings, as well as predicting
 
         Returns:
-            list: return prediction results for training, validation and test set of 
+            list: return prediction results for training, validation and test set of
             majority and minority respectively in different cross validation
             iterations. For ``SIML`` model, it also contain weights for minority
             training instances.
@@ -202,23 +216,9 @@ class SIML(DatasetSize):
             self.cv_method = "basis1"
 
         self.cal_size()
-        self.split_data(random_state=self.random_state)
-        self.preprocessing()
+        self.split_data(random_state=self.random_state, **kws)
+        self.preprocessing(**kws)
 
-        parameters = dict(self.parameters)
-        match basic_model := self.basic_model:
-            case "DT":
-                regr = DecisionTreeRegressor(max_depth=10)
-            case "RF":
-                regr = RandomForestRegressor(n_estimators=10)
-            case _:  # Default model is SVR
-                regr = SVR(kernel="rbf", C=10)
-
-        if parameters is not None:
-            for key, value in parameters.items():
-                regr.__setattr__(key, value)
-
-        self.regr = regr
         results = []
 
         match method:
@@ -231,7 +231,7 @@ class SIML(DatasetSize):
 
         return results
 
-    def preprocessing(self) -> None:
+    def preprocessing(self, ascending=False) -> None:
         """Data preprocessing
 
         It mainly includes:
@@ -242,7 +242,8 @@ class SIML(DatasetSize):
 
         """
         data = self.data
-        data.sort_values(by="Experimental", inplace=True, ascending=True)
+        if ascending:
+            data.sort_values(by="Experimental", inplace=True, ascending=True)
         X = data.iloc[:, 3:].fillna(0).values
         X = MinMaxScaler().fit_transform(pd.DataFrame(X))
         y = data.iloc[:, 1].values
