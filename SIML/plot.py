@@ -1,4 +1,5 @@
 import math
+import os
 from dataclasses import dataclass
 from typing import Tuple
 
@@ -6,13 +7,13 @@ import matplotlib as mpl
 import matplotlib.cm as cm
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
-import mendeleev
 import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import seaborn as sns
 from matminer.featurizers.conversions import StrToComposition
-from matplotlib import rcParams
+from pymatgen.core.composition import Composition
 
 
 @dataclass
@@ -37,7 +38,7 @@ class EMetric:
     cp3: float
 
 
-def Count(errors: np.array, t1: float = 0.5, t2: float = 1) -> list:
+def count_errors(errors: np.array, t1: float = 0.5, t2: float = 1) -> list:
     """Count nums according to the levels of error
 
     Args:
@@ -96,63 +97,185 @@ def auto_label(rects) -> None:
         )
 
 
-def PlotBar(
+def plot_histogram(data: pd.DataFrame, **kws) -> None:
+    x = data["Experimental"].values
+    num_bins = kws.get("num_bins", 80)
+    ranges = kws.get("ranges", [-2, 22])
+    dpi = kws.get("dpi", 100)
+    fig, ax = plt.subplots(dpi=dpi)
+    ax.hist(x, num_bins, ranges, density=True, facecolor="bisque", edgecolor="black")
+    sns.kdeplot(x, fill=True, color="orange", alpha=0.3)
+
+    fontdict = {"weight": "bold"}
+    ax.set_xlabel("Experimental bandgaps (eV)", fontdict=fontdict)
+    ax.set_ylabel("Probability density", fontdict=fontdict)
+    ax.set_xlim(ranges)
+
+    fig.tight_layout()
+    plt.show()
+
+
+@dataclass
+class Element:
+    """A dataclass for elements in periodic table
+    
+    Args:
+        number (int): the element number.
+        symbol (str): the element symbol.
+        group (int): the element group.
+        period (int): the element period.
+
+    """
+    number: int
+    symbol: str
+    group: int
+    period: int
+
+
+class PT:
+    """Periodic table helper
+    
+    Attributes:
+        pt (pd.DataFrame): periodic table object, including some basic information.
+    """
+    def __init__(self) -> None:
+        self.pt = pd.read_csv(f"{os.getcwd()}/periodictable.csv", header=None)
+
+    def get_element_symbol(self, number: int) -> str:
+        """Get element symbol by element number
+
+        Args:
+            number (int): the element number.
+
+        Returns:
+            str: the element symbol.
+        """
+        symbol = self.pt.iloc[number - 1, 1]
+        return symbol
+
+    def get_element_number(self, symbol: str) -> int:
+        """Get element number by element symbol
+
+        Args:
+            symbol (str): the element symbol.
+
+        Returns:
+            int: the element number.
+        """
+        number = self.pt[self.pt[1] == symbol].iloc[0, 0]
+        return number
+
+    def get_element(self, **kws) -> Element:
+        """Get element object
+        
+        It will use symbol to obtain the information for the element by default. If no 
+        symbol, the element number will be requred.
+
+        Returns:
+            Element: the element object.
+        """
+        if "symbol" in kws:
+            number = self.get_element_number(kws.get("symbol"))
+        elif "number" in kws:
+            number = kws.get("number")
+        else:
+            raise ValueError(f"Please give 'symbol' or 'number'!")
+        element = Element(
+            number,
+            self.pt.iloc[number - 1, 1],
+            int(self.pt.iloc[number - 1, 4]),
+            int(self.pt.iloc[number - 1, 5]),
+        )
+        return element
+
+
+def get_elements_length(composition: Composition) -> int:
+    """Calculate the number of elements
+
+    Args:
+        composition (Composition): the composition object for specified material.
+
+    Returns:
+        int: the number of elements in specified material.
+    """
+    return len(composition.elements)
+
+
+def get_level(value: float, level1: float = 3.0, level2: float = 5.0) -> int:
+    """Calculate the level of the property value
+
+    Args:
+        value (float): the property value, for example "bandgap" value.
+        level1 (float, optional): the threshold value of level 1. Defaults to 3.0.
+        level2 (float, optional): the threshold value of level 2. Defaults to 5.0.
+
+    Returns:
+        int: the level of the property value.
+    """
+    if value < level1:
+        return 1
+    if value < level2:
+        return 2
+    return 3
+
+
+def plot_bar(
     data: pd.DataFrame,
     level1: float = 3.0,
     level2: float = 5.0,
     filename: str = None,
+    **kws,
 ) -> None:
     """Plot the distribution according to the number of elements
 
     Args:
         data (pd.DataFrame): the data with features and property.
-        level1 (float, optional): the threshold value of level 1. Defaults to 3.
-        level2 (float, optional): the threshold value of level 2. Defaults to 5.
+        level1 (float, optional): the threshold value of level 1. Defaults to 3.0.
+        level2 (float, optional): the threshold value of level 2. Defaults to 5.0.
         filename (str, optional): the filename you want to save the figure. Defaults to
             None.
-
     """
-    nums = [0, 0, 0, 0]
-    stats = np.zeros([4, 3], dtype=np.int64)
-
+    unit = kws.get("unit", "eV")
+    dpi = kws.get("dpi", 100)
     df = StrToComposition().featurize_dataframe(
         data[["Material", "Experimental"]], "Material"
     )
-
-    for i in range(0, len(df)):
-        length = len(df.iloc[i]["composition"].elements)
-        df.loc[i, "elements"] = length
-        nums[length - 1] += 1
-        if df.iloc[i]["Experimental"] < level1:
-            stats[length - 1][0] += 1
-        elif df.iloc[i]["Experimental"] < level2:
-            stats[length - 1][1] += 1
-        else:
-            stats[length - 1][2] += 1
-
-    stats = stats.T
-
-    width = 0.2
-    sname = ["1", "2", "3", "4"]
-    index = np.arange(len(sname))
-    labels = [
-        f"0~{level1} eV",
-        f"{level1}~{level2} eV",
-        f">{level2} eV",
-    ]
+    df["elements"] = df["composition"].map(get_elements_length)
+    df["level"] = df["Experimental"].apply(lambda x: get_level(x, level1, level2))
+    counts = df.iloc[:, 3:].groupby(["elements", "level"]).value_counts()
+    counts_max = counts.max()
+    if counts_max < 500:
+        y_max = math.ceil(counts_max / 100) * 100
+    else:
+        y_max = math.ceil(counts_max / 100) * 100 + 500
+    y_max = kws.get("y_max", y_max)
+    counts = counts.to_dict()
+    stats = np.zeros([3, 4], dtype=np.int64)
+    for e, l in counts:
+        stats[l - 1][e - 1] = counts[(e, l)]
+    statss = {
+        f"0~{level1} {unit}": tuple(stats[0]),
+        f"{level1}~{level2} {unit}": tuple(stats[1]),
+        f">{level2} {unit}": tuple(stats[2]),
+    }
+    species = ("1", "2", "3", "4")
+    x = np.arange(len(species))  # the label locations
+    width = 0.2  # the width of the bars
+    index = 0
     colors = ["bisque", "orange", "royalblue"]
+    fig, ax = plt.subplots(dpi=dpi)
 
-    r1 = plt.bar(index - width, stats[0], width, color=colors[0], label=labels[0])
-    r2 = plt.bar(index, stats[1], width, color=colors[1], label=labels[1])
-    r3 = plt.bar(index + width, stats[2], width, color=colors[2], label=labels[2])
-    auto_label(r1)
-    auto_label(r2)
-    auto_label(r3)
+    for label, count in statss.items():
+        offset = width * index
+        rects = ax.bar(x + offset, count, width, label=label, color=colors[index % 3])
+        ax.bar_label(rects, padding=3)
+        index += 1
 
-    plt.xticks(index, labels=sname)
-    plt.xlabel("# Elements", fontweight="bold")
-    plt.ylabel("Count", fontweight="bold")
-    plt.legend()
+    ax.set_xlabel("# Elements", fontweight="bold")
+    ax.set_ylabel("Count", fontweight="bold")
+    ax.set_xticks(x + width, species)
+    ax.legend(loc="upper left", ncols=3, frameon=False)
+    ax.set_ylim(0, y_max)
 
     if filename:
         plt.savefig(filename, dpi=600)
@@ -160,7 +283,7 @@ def PlotBar(
         plt.show()
 
 
-def CalDistribution(
+def cal_distribution(
     data: pd.DataFrame, level1: float = 3, level2: float = 5
 ) -> Tuple[list, list]:
     """Calculate the distribution of the property
@@ -173,14 +296,13 @@ def CalDistribution(
     Returns:
         Tuple[list, list]: return the distribution according to existed elements and
         periodic table.
-
     """
     results = dict()
     results_summary = dict()
     df = StrToComposition().featurize_dataframe(
         data[["Material", "Experimental"]], "Material"
     )
-
+    PThelper = PT()
     for i in range(0, df.shape[0]):
         cmp = df.iloc[i]["composition"]
         bandgap = df.iloc[i]["Experimental"]
@@ -188,8 +310,7 @@ def CalDistribution(
         for j in range(0, element_num):
             element = str(cmp.elements[j])
             if element not in results:
-                med = mendeleev.element(element)
-                results[element] = [0, 0, 0, med.atomic_number]
+                results[element] = [0, 0, 0, PThelper.get_element_number(element)]
                 results_summary[element] = 0
             if bandgap <= level1:
                 results[element][0] += 1
@@ -205,8 +326,12 @@ def CalDistribution(
     return distribution, distribution_sum
 
 
-def PlotPeriod(
-    data: pd.DataFrame, level1: float = 3, level2: float = 5, filename: str = None
+def plot_period(
+    data: pd.DataFrame,
+    level1: float = 3,
+    level2: float = 5,
+    filename: str = None,
+    **kws,
 ) -> None:
     """Plot the distribution according to periodic table
 
@@ -215,18 +340,18 @@ def PlotPeriod(
         level1 (float, optional): the threshold value of level 1. Defaults to 3.
         level2 (float, optional): the threshold value of level 2. Defaults to 5.
         filename (str, optional): the filename you want to save the figure.
-
     """
+    dpi = kws.get("dpi", 100)
     cell_length = 1
     cell_gap = 0.1
     cell_edge_width = 0.5
 
-    _, results_summary = CalDistribution(data, level1, level2)
+    _, results_summary = cal_distribution(data, level1, level2)
     elements = []
-
+    PThelper = PT()
     for i in range(1, 119):
-        ele = mendeleev.element(i)
-        ele_group, ele_period = ele.group_id, ele.period
+        ele = PThelper.get_element(number=i)
+        ele_group, ele_period = ele.group, ele.period
 
         if 57 <= i <= 71:
             ele_group = i - 57 + 3
@@ -250,10 +375,10 @@ def PlotPeriod(
     elements.append([None, "LA", 2, 8, None])
     elements.append([None, "AC", 2, 9, None])
 
-    plt.figure(figsize=(10, 5))
+    plt.figure(figsize=(10, 5), dpi=dpi)
     xy_length = (20, 11)
 
-    my_cmap = cm.get_cmap("RdYlGn")
+    my_cmap = cm.get_cmap(kws.get("cmap", "RdYlGn"))
     norm = mpl.colors.Normalize(1, 111)
     my_cmap.set_under("None")
     cmmapable = cm.ScalarMappable(norm, my_cmap)
@@ -332,22 +457,17 @@ def make_autopct(values: list) -> str:
 
     Return:
         str: the label.
-
     """
 
     def my_autopct(pct):
         total = sum(values)
         val = int(round(pct * total / 100.0))
-        # return '{p:.2f}%  ({v:d})'.format(p=pct,v=val)
-        if val == 0:
-            return ""
-        else:
-            return "{v:d}".format(v=val)
+        return "" if val == 0 else f"{val:d}"
 
     return my_autopct
 
 
-def PlotCirle(
+def plot_circle(
     data: pd.DataFrame, level1: float = 3, level2: float = 5, filename: str = None
 ) -> None:
     """Plot the distribution according to existed elements
@@ -358,13 +478,8 @@ def PlotCirle(
         level2 (float, optional): the threshold value of level 2. Defaults to 5.
         filename (str, optional): the filename you want to save the figure. Defaults to
             None.
-
     """
-    rcParams["font.family"] = "Arial"
-    rcParams["font.weight"] = "bold"
-    rcParams["font.size"] = "12"
-
-    distribution, _ = CalDistribution(data, level1, level2)
+    distribution, _ = cal_distribution(data, level1, level2)
     dt = distribution.T
     dt.columns = ["col1", "col2", "col3", "col4"]
     dt.sort_values(by=["col4"], inplace=True)
@@ -384,8 +499,14 @@ def PlotCirle(
     i = 0
     j = 0
 
+    textprops = {"weight": "bold", "size": 14}
     for key in keys:
-        axs[i, j].pie(results[key], autopct=make_autopct(results[key]), colors=colors)
+        axs[i, j].pie(
+            results[key],
+            autopct=make_autopct(results[key]),
+            colors=colors,
+            textprops=textprops,
+        )
         axs[i, j].set_title(key, fontsize="16", fontweight="bold")
         if j < 11:
             j += 1
@@ -397,7 +518,7 @@ def PlotCirle(
         axs[i, k].axis("off")
 
     fig.tight_layout()
-    fig.legend(labels=labels, loc="lower right")
+    fig.legend(labels=labels, loc="lower right", prop=textprops)
 
     if filename == None:
         plt.show()
@@ -405,7 +526,9 @@ def PlotCirle(
         plt.savefig(filename, dpi=600)
 
 
-def PlotPrediction(result: np.array, method: str, filename: str = None) -> None:
+def plot_prediction(
+    result: np.array, method: str, title: str = None, filename: str = None, **kws
+) -> None:
     """Plot prediction-experimental values
 
     Args:
@@ -413,7 +536,6 @@ def PlotPrediction(result: np.array, method: str, filename: str = None) -> None:
         method (str): the method name.
         filename (str, optional): the filename you want to save the figure. Defaults to
             None.
-
     """
     names1 = [
         "Train (Majority)",
@@ -429,7 +551,6 @@ def PlotPrediction(result: np.array, method: str, filename: str = None) -> None:
         "Validation (Minority)",
         "Test (Minority)",
     ]
-    symbols = ["circle", "square", "diamond", "star"]
     colors = [
         "rgb(31, 119, 180)",
         "rgb(255, 127, 13)",
@@ -438,6 +559,16 @@ def PlotPrediction(result: np.array, method: str, filename: str = None) -> None:
         "rgb(148, 103, 189)",
         "rgb(140, 86, 75)",
     ]
+    if "colors" in kws:
+        colors_l = len(kws.get("colors"))
+        if colors_l == 6:
+            colors = kws.get("colors")
+        else:
+            raise ValueError("Parameter 'colors' should include six colors!")
+    length = 6 if int(len(result) / 3) > 6 else int(len(result) / 3)
+    names = names1 if method == "basis1" else names2
+    if title == None:
+        title = method
 
     fig = go.Figure()
     fig.add_trace(
@@ -469,17 +600,6 @@ def PlotPrediction(result: np.array, method: str, filename: str = None) -> None:
             name="Best line",
         )
     )
-
-    length = 6 if int(len(result) / 3) > 6 else int(len(result) / 3)
-
-    match method:
-        case "basis1":
-            names = names1
-        case _:
-            names = names2
-
-    title = filename
-
     for i in range(length):
         fig.add_trace(
             go.Scatter(
@@ -493,18 +613,6 @@ def PlotPrediction(result: np.array, method: str, filename: str = None) -> None:
                 ),
             )
         )
-
-    # fig.add_trace(
-    #     go.Scatter(
-    #         x=[-3, 16],
-    #         y=[-3, 16],
-    #         error_y=[2, 2],
-    #         error_y_mode="band",
-    #         marker_color="red",
-    #         line_dash="dash",
-    #         name="Best line",
-    #     )
-    # )
     fig.add_vline(x=5, line=dict(width=3, dash="dash", color="red"))
     fig.add_vrect(
         x0=0,
@@ -528,7 +636,6 @@ def PlotPrediction(result: np.array, method: str, filename: str = None) -> None:
         layer="below",
         line_width=0,
     )
-
     fig.update_layout(
         title="<b>" + title + "<b>",
         titlefont=dict(size=24),
@@ -554,14 +661,13 @@ def PlotPrediction(result: np.array, method: str, filename: str = None) -> None:
         fig.show()
 
 
-def PlotPredictionError(result: np.array, filename: str = None) -> None:
+def plot_prediction_error(result: np.array, filename: str = None) -> None:
     """Plot error distribution
 
     Args:
         result (np.array): the error results comparing to experimental values.
         filename (str, optional): the filename you want to save the figure. Defaults to
             None.
-
     """
     names1 = [
         "Train (Majority)",
@@ -584,7 +690,7 @@ def PlotPredictionError(result: np.array, filename: str = None) -> None:
     length = int(len(result) / 3)
     nums = []
     for i in range(length):
-        nums.append(Count(result[2 + 3 * i] - result[1 + 3 * i]))
+        nums.append(count_errors(result[2 + 3 * i] - result[1 + 3 * i]))
     nums = np.array(nums)
 
     match length:
@@ -603,10 +709,6 @@ def PlotPredictionError(result: np.array, filename: str = None) -> None:
                 marker_color=marker_colors[i],
             )
         )
-
-    # annotations = []
-    # for i in range()
-
     fig.update_layout(
         barmode="stack",
         title="Error Distribution - SVR (rbf, Basis 1)",
@@ -630,14 +732,13 @@ def PlotPredictionError(result: np.array, filename: str = None) -> None:
         fig.show()
 
 
-def PlotPredictionMAPE(result: np.array, filename: str = None) -> None:
+def plot_prediction_mape(result: np.array, filename: str = None) -> None:
     """Plot MAPE distribution of prediction result
 
     Args:
         result (np.array): the prediction result.
         filename (str, optional): the filename you want to save the figure. Defaults to
             None.
-
     """
     # definitions for the axes
     left, width = 0.1, 0.65
@@ -744,10 +845,10 @@ def OldPlotPredictionError(result: np.array):
     y_majority_test_d = result[8] - result[7]
     y_minority_test_d = result[11] - result[10]
     nums = []
-    nums.append(Count(y_train_d))
-    nums.append(Count(y_validation_d))
-    nums.append(Count(y_majority_test_d))
-    nums.append(Count(y_minority_test_d))
+    nums.append(count_errors(y_train_d))
+    nums.append(count_errors(y_validation_d))
+    nums.append(count_errors(y_majority_test_d))
+    nums.append(count_errors(y_minority_test_d))
     nums = np.array(nums)
 
     plt.rcParams["figure.figsize"] = (5, 3)
@@ -901,7 +1002,7 @@ def OldPlotPredictionPlotly(result: np.array):
     fig.show()
 
 
-def PlotHyperparametr(
+def plot_hypterparmeter(
     op_summarys: np.array,
     filename: str,
     is_std: bool = True,
@@ -917,7 +1018,6 @@ def PlotHyperparametr(
         is_show (bool, optional): whether show immediately. Defaults to False.
         metric (str, optional): the metric used to compare, which can be "rmse" or
             "mae". Defaults to "mae".
-
     """
     match metric:
         case "mae":
