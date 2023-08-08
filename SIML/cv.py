@@ -24,6 +24,7 @@ class Setting:
         random_state (int): the random seed for random sampling.
 
     """
+
     majority_pro: float
     minority_pro: float
     majority_test_num: int
@@ -43,6 +44,7 @@ class DataSize:
         test (int): the number of test data. Defaults to 0.
 
     """
+
     total: int
     train: int = 0
     validation: int = 0
@@ -102,6 +104,7 @@ class DatasetSize:
         iterations (int): the iteration of cross validation.
 
     """
+
     def __init__(
         self,
         data: pd.DataFrame,
@@ -374,8 +377,6 @@ class DatasetSize:
                 self.split_data_kfoldcv(settings)
 
         self.iterations = len(self.splited_data)
-
-        print("Split data: OK")
 
     def split_data_siml(self, settings: Setting) -> None:
         """Split dataset according to siml cross validation method
