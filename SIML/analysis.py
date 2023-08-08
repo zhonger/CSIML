@@ -1,6 +1,7 @@
-import os.path
+import pickle
 import time
 from collections import defaultdict
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
@@ -24,7 +25,6 @@ def evaluation(y: np.array, y_pred: np.array) -> dict:
 
     Returns:
         dict: return metrics dict.
-
     """
     error = abs(y - y_pred)
     mae = mean_absolute_error(y, y_pred)
@@ -43,16 +43,114 @@ def evaluation(y: np.array, y_pred: np.array) -> dict:
     return metrics
 
 
+@dataclass
+class ResData:
+    """Result data
+
+    Args:
+        y (list): all y values
+        y_pred (list): all y prediction values
+        y_majority (list): all y majority values
+        y_majority_pred (list): all y majority prediction values
+        y_minority (list): all y minority values
+        y_minority_pred (list): all y minority prediction values
+    """
+
+    y: list
+    y_pred: list
+    y_majority: list
+    y_majority_pred: list
+    y_minority: list
+    y_minority_pred: list
+
+
+def evaluation_batch(res: ResData) -> list:
+    """Evaluation performance for different results and metrics as tasks
+
+    Args:
+        res (ResData): result dataset including six lists.
+
+    Returns:
+        list: The evaluation metric values.
+    """
+    tasks = [
+        ["y", "y_pred", "mae"],
+        ["y", "y_pred", "mae_std"],
+        ["y_majority", "y_majority_pred", "mae"],
+        ["y_majority", "y_majority_pred", "mae_std"],
+        ["y_minority", "y_minority_pred", "mae"],
+        ["y_minority", "y_minority_pred", "mae_std"],
+        ["y", "y_pred", "variance"],
+        ["y", "y_pred", "rmse"],
+        ["y_majority", "y_majority_pred", "rmse"],
+        ["y_minority", "y_minority_pred", "rmse"],
+        ["y", "y_pred", "mape"],
+        ["y", "y_pred", "r2"],
+    ]
+    metric_values = []
+    for task in tasks:
+        y = res.__getattribute__(task[0])
+        y_pred = res.__getattribute__(task[1])
+        metric = task[2]
+        metric_value = evaluation_metric(y, y_pred, metric)
+        metric_values.append(metric_value)
+    return metric_values
+
+
+def evaluation_metrics(y: np.array, y_pred: np.array, metrics: list) -> list:
+    """Evaluate performance in term of specified metrics
+
+    Args:
+        y (np.array): Experimental values.
+        y_pred (np.array): Prediction values.
+        metrics (list): Evaluation metrics, should be a list of supporting metrics.
+
+    Returns:
+        list: The evaluation metric values.
+    """
+    metric_values = []
+    for metric in metrics:
+        metric_values.append(evaluation_metric(y, y_pred, metric))
+    return metric_values
+
+
+def evaluation_metric(y: np.array, y_pred: np.array, metric: str) -> float:
+    """Evaluate performance in term of one specified metric
+
+    Args:
+        y (np.array): Experimental values.
+        y_pred (np.array): Prediction values.
+        metric (str): Evaluation metric, now supporting "mae", "mae_std", "rmse",
+            "variance", "mape", "r2".
+
+    Returns:
+        float: The evaluation metric value.
+    """
+    match metric:
+        case "mae":
+            return mean_absolute_error(y, y_pred)
+        case "mae_std":
+            return np.std(abs(y - y_pred))
+        case "rmse":
+            return mean_squared_error(y, y_pred)
+        case "variance":
+            return median_absolute_error(y, y_pred)
+        case "mape":
+            return mean_absolute_percentage_error(y, y_pred)
+        case "r2":
+            return r2_score(y, y_pred)
+
+
 def analyze_results(results: np.array, method: str) -> np.array:
     """Analyze the results from total, majority and minority ways
 
     Args:
         results (np.array): prediction results for many iterations.
-        method (str): the method name, should be one of "basis1", "basis2" and "siml".
+        method (str): the method name, should be one of "basis1", "basis2", "siml",
+            "over", "under".
 
     Returns:
         np.array: return analysis metrics.
-
     """
     summarys = []
     for result in results:
@@ -96,96 +194,36 @@ def analyze_results(results: np.array, method: str) -> np.array:
                 y_test = np.append(y_majority_test, y_minority_test)
                 y_test_pred = np.append(y_majority_test_pred, y_minority_test_pred)
 
-        train_mae = mean_absolute_error(y_train, y_train_pred)
-        train_std = np.std(abs(y_train - y_train_pred))
-        train_majority_mae = mean_absolute_error(
-            y_majority_train, y_majority_train_pred
+        res_train = ResData(
+            y_train,
+            y_train_pred,
+            y_majority_train,
+            y_majority_train_pred,
+            y_minority_train,
+            y_minority_train_pred,
         )
-        train_majority_std = np.std(abs(y_majority_train - y_majority_train_pred))
-        train_minority_mae = mean_absolute_error(
-            y_minority_train, y_minority_train_pred
+        res_validation = ResData(
+            y_validation,
+            y_validation_pred,
+            y_majority_validation,
+            y_majority_validation_pred,
+            y_minority_validation,
+            y_minority_validation_pred,
         )
-        train_minority_std = np.std(abs(y_minority_train - y_minority_train_pred))
-        train_var = median_absolute_error(y_train, y_train_pred)
-        train_rmse = mean_squared_error(y_train, y_train_pred)
-        train_mape = mean_absolute_percentage_error(y_train, y_train_pred)
-        train_r2 = r2_score(y_train, y_train_pred)
-        v_mae = mean_absolute_error(y_validation, y_validation_pred)
-        v_std = np.std(abs(y_validation - y_validation_pred))
-        v_majority_mae = mean_absolute_error(
-            y_majority_validation, y_majority_validation_pred
+        res_test = ResData(
+            y_test,
+            y_test_pred,
+            y_majority_test,
+            y_majority_test_pred,
+            y_minority_test,
+            y_minority_test_pred,
         )
-        v_majority_std = np.std(abs(y_majority_validation - y_majority_validation_pred))
-        v_minority_mae = mean_absolute_error(
-            y_minority_validation, y_minority_validation_pred
-        )
-        v_minority_std = np.std(abs(y_minority_validation - y_minority_validation_pred))
-        v_var = median_absolute_error(y_validation, y_validation_pred)
-        v_rmse = mean_squared_error(y_validation, y_validation_pred)
-        v_mape = mean_absolute_percentage_error(y_validation, y_validation_pred)
-        v_r2 = r2_score(y_validation, y_validation_pred)
-        t_mae = mean_absolute_error(y_test, y_test_pred)
-        t_std = np.std(abs(y_test - y_test_pred))
-        t_majority_mae = mean_absolute_error(y_majority_test, y_majority_test_pred)
-        t_majority_std = np.std(abs(y_majority_test - y_majority_test_pred))
-        t_minority_mae = mean_absolute_error(y_minority_test, y_minority_test_pred)
-        t_minority_std = np.std(abs(y_minority_test - y_minority_test_pred))
-        t_var = median_absolute_error(y_test, y_test_pred)
-        t_rmse = mean_squared_error(y_test, y_test_pred)
-        t_mape = mean_absolute_percentage_error(y_test, y_test_pred)
-        t_r2 = r2_score(y_test, y_test_pred)
-        train_majority_rmse = mean_squared_error(
-            y_majority_train, y_majority_train_pred
-        )
-        train_minority_rmse = mean_squared_error(
-            y_minority_train, y_minority_train_pred
-        )
-        v_majority_rmse = mean_squared_error(
-            y_majority_validation, y_majority_validation_pred
-        )
-        v_minority_rmse = mean_squared_error(
-            y_minority_validation, y_minority_validation_pred
-        )
-        t_majority_rmse = mean_squared_error(y_majority_test, y_majority_test_pred)
-        t_minority_rmse = mean_squared_error(y_minority_test, y_minority_test_pred)
-
-        summary.append(train_mae)
-        summary.append(train_std)
-        summary.append(train_majority_mae)
-        summary.append(train_majority_std)
-        summary.append(train_minority_mae)
-        summary.append(train_minority_std)
-        summary.append(train_var)
-        summary.append(train_rmse)
-        summary.append(train_mape)
-        summary.append(train_r2)
-        summary.append(v_mae)
-        summary.append(v_std)
-        summary.append(v_majority_mae)
-        summary.append(v_majority_std)
-        summary.append(v_minority_mae)
-        summary.append(v_minority_std)
-        summary.append(v_var)
-        summary.append(v_rmse)
-        summary.append(v_mape)
-        summary.append(v_r2)
-        summary.append(t_mae)
-        summary.append(t_std)
-        summary.append(t_majority_mae)
-        summary.append(t_majority_std)
-        summary.append(t_minority_mae)
-        summary.append(t_minority_std)
-        summary.append(t_var)
-        summary.append(t_rmse)
-        summary.append(t_mape)
-        summary.append(t_r2)
-        summary.append(train_majority_rmse)
-        summary.append(train_minority_rmse)
-        summary.append(v_majority_rmse)
-        summary.append(v_minority_rmse)
-        summary.append(t_majority_rmse)
-        summary.append(t_minority_rmse)
-
+        train_metrics = evaluation_batch(res_train)
+        validation_metrics = evaluation_batch(res_validation)
+        test_metrics = evaluation_batch(res_test)
+        summary.extend(train_metrics)
+        summary.extend(validation_metrics)
+        summary.extend(test_metrics)
         summarys.append(summary)
 
     return summarys
@@ -375,7 +413,6 @@ def handle_key_value(op_result: np.array) -> dict:
 
     Returns:
         dict: return parameters dict.
-
     """
     keys = op_result[0][-2]
     values = op_result[0][-1]
@@ -394,7 +431,6 @@ def analyze_hyperparameter(op_results: np.array, op_object: str = "C") -> np.arr
 
     Returns:
         np.array: return metrics summary ``op_summarys``.
-
     """
     op_summarys = []
 
@@ -419,11 +455,10 @@ def analyze_summarys(summarys: list) -> np.array:
 
     Returns:
         np.array: return mean of summary metrics ``summarys_mean``.
-
     """
     summarys = pd.DataFrame(summarys)
     summarys_mean = []
-    for _, col in summarys.iteritems():
+    for _, col in summarys.items():
         summarys_mean.append(col.mean())
     return summarys_mean
 
@@ -435,11 +470,11 @@ def save_metrics(metrics: list, csvfile: str = "summary.xlsx") -> None:
         metrics (list): metrics for results.
         csvfile (str, optional): filename you want to save for metrics summary.
             Defaults to "summary.xlsx".
-
     """
     print_metrics = []
     it = iter(metrics)
-    for i in range(3):
+    i = 3
+    while i > 0:
         print_metric = []
         print_metric.append(f"{next(it):6f} ± {next(it):6f}")
         print_metric.append(f"{next(it):6f} ± {next(it):6f}")
@@ -448,29 +483,77 @@ def save_metrics(metrics: list, csvfile: str = "summary.xlsx") -> None:
         print_metric.append(f"{next(it):6f}")
         print_metric.append(f"{next(it):6f}")
         print_metric.append(f"{next(it):6f}")
-        # it = iter(range(10*i, 10*(i+1)))
-        # print_metric.append(f"{metrics[next(it)]:6f} ± {metrics[next(it)]:6f}")
-        # print_metric.append(f"{metrics[next(it)]:6f} ± {metrics[next(it)]:6f}")
-        # print_metric.append(f"{metrics[next(it)]:6f} ± {metrics[next(it)]:6f}")
-        # print_metric.append(f"{metrics[next(it)]:6f}")
-        # print_metric.append(f"{metrics[next(it)]:6f}")
-        # print_metric.append(f"{metrics[next(it)]:6f}")
-        # print_metric.append(f"{metrics[next(it)]:6f}")
-        # print_metric.append(f"{metrics[0+10*i]:6f} ± {metrics[1+10*i]:6f}")
-        # print_metric.append(f"%.6f ± %.6f" % (metrics[2 + 10 * i], metrics[3 + 10 * i]))
-        # print_metric.append(f"%.6f ± %.6f" % (metrics[4 + 10 * i], metrics[5 + 10 * i]))
-        # print_metric.append(f"%.6f" % metrics[6 + 10 * i])
-        # print_metric.append(f"%.6f" % metrics[7 + 10 * i])
-        # print_metric.append(f"%.6f" % metrics[8 + 10 * i])
-        # print_metric.append(f"%.6f" % metrics[9 + 10 * i])
+        print_metric.append(f"{next(it):6f}")
+        print_metric.append(f"{next(it):6f}")
         print_metrics.append(print_metric)
+        i -= 1
 
     header = ["Training", "Validation", "Test"]
     print_metrics = pd.DataFrame(print_metrics).T
-    with pd.ExcelWriter(csvfile) as writer:
+    with pd.ExcelWriter(csvfile, mode="w") as writer:
         print_metrics.to_excel(
             excel_writer=writer, sheet_name="summary", header=header, index=None
         )
+
+
+def save_metrics_batch(
+    dataset: str = "468",
+    path: str = "results",
+    methods: list = ["basis1", "basis2", "oversampling", "undersampling", "siml"],
+    random_states: list = [1, 3, 5, 10, 15, 20, 30, 35, 40, 45, 50],
+    decimal: int = 3,
+):
+    """Save metrics with a batch for different random seeds
+
+    Args:
+        dataset (str, optional): the name of dataset. Defaults to "468".
+        path (str, optional): the path of result files. Defaults to "results".
+        methods (list, optional): learning methods. Defaults to ["basis1", "basis2", 
+            "oversampling", "undersampling", "siml"].
+        random_states (list, optional): random seed list. Defaults to [1, 3, 5, 10, 15, 
+            20, 30, 35, 40, 45, 50].
+        decimal (int, optional): the decimal place for metrics. Defaults to 3.
+    """
+    n = 0
+    for random_state in random_states:
+        ob = []
+        for method in methods:
+            filename = f"{path}/results_{dataset}_{random_state}_{method}.pkl"
+            ob.append(Analysis(filename, method))
+
+        for i in range(len(methods)):
+            print_metrics = []
+            metrics = [round(i, decimal) for i in ob[i].metrics]
+            it = iter(metrics)
+            j = 3
+            while j > 0:
+                print_metric = []
+                print_metric.append(f"{next(it)} ± {next(it)}")
+                print_metric.append(f"{next(it)} ± {next(it)}")
+                print_metric.append(f"{next(it)} ± {next(it)}")
+                print_metric.append(f"{next(it)}")
+                print_metric.append(f"{next(it)}")
+                print_metric.append(f"{next(it)}")
+                print_metric.append(f"{next(it)}")
+                print_metric.append(f"{next(it)}")
+                print_metric.append(f"{next(it)}")
+                print_metrics.append(print_metric)
+                j -= 1
+            print_metrics = np.array(print_metrics).T
+            if i == 0:
+                summary = print_metrics
+            else:
+                summary = np.vstack((summary, print_metrics))
+
+        df = pd.DataFrame(np.array(summary))
+        if n == 0:
+            with pd.ExcelWriter(f"summary/{dataset}_{path}.xlsx", mode="w") as f:
+                df.to_excel(f, sheet_name=f"{random_state}", header=None, index=None)
+        else:
+            with pd.ExcelWriter(f"summary/{dataset}_{path}.xlsx", mode="a") as f:
+                df.to_excel(f, sheet_name=f"{random_state}", header=None, index=None)
+        n += 1
+        print(f"Random seed {random_state} has been saved.")
 
 
 def index_to_name(data: pd.DataFrame, index: list) -> np.array:
@@ -482,7 +565,6 @@ def index_to_name(data: pd.DataFrame, index: list) -> np.array:
 
     Returns:
         np.array: return names array.
-
     """
     df = pd.DataFrame(data.iloc[:, 0])
     names = pd.DataFrame(df.iloc[index, :].reset_index(drop=True)).T
@@ -507,7 +589,6 @@ def save_result(
             header. Defaults to None.
         index (bool or list, optional): whether to write the index or with the given
             index. Defaults to None.
-
     """
     for i, result in enumerate(results):
         result = pd.DataFrame(result).T
@@ -543,7 +624,6 @@ def save_results(results: pd.DataFrame, filename: str, n_jobs: int = 25) -> None
         filename (str): the filename you want to save results.
         n_jobs (int, optional): the cores to be used, only available when iterations
             are more than 25.
-
     """
     iterations = len(results)
     if iterations > 25:
@@ -555,6 +635,26 @@ def save_results(results: pd.DataFrame, filename: str, n_jobs: int = 25) -> None
     else:
         save_result(results, filename)
     print(f"Save all results into excel files for `{filename}` successfully.")
+
+
+def load_pkl(filename: str) -> list:
+    """Load results from pkl binary file
+
+    Args:
+        filename (str): The filename used including the path.
+
+    Raises:
+        FileNotFoundError: if the specified file cannot be found.
+
+    Returns:
+        list: return the results list object.
+    """
+    try:
+        with open(filename, "rb") as file:
+            results = pickle.load(file)
+        return results
+    except FileNotFoundError:
+        raise FileNotFoundError(f"{filename} not found")
 
 
 def load_result(filename: str, sheet_name: str) -> np.array:
@@ -569,7 +669,6 @@ def load_result(filename: str, sheet_name: str) -> np.array:
 
     Returns:
         np.array: return ``result`` for one iteration from excel file.
-
     """
     try:
         data = pd.read_excel(filename, sheet_name)
@@ -594,7 +693,6 @@ def load_results(filename: str, parallel: bool = False) -> np.array:
 
     Returns:
         np.array: return ``results`` from excel file.
-
     """
     try:
         data_results = pd.ExcelFile(filename)
@@ -632,7 +730,6 @@ def load_summarys(metrics_filename: str) -> np.array:
 
     Returns:
         np.array: return ``op_summarys`` for each C.
-
     """
     try:
         data_metrics = pd.read_excel(metrics_filename, "op_metrics", index_col=0)
@@ -662,7 +759,6 @@ def save_analyzed_result(
         results (pd.DataFrame): analysis results.
         filename (str): filename you want to save analysis results.
         iteration (int, optional): the number of iteration. Defaults to 0.
-
     """
     for i, result in enumerate(results):
         result = pd.DataFrame(result)
@@ -690,7 +786,7 @@ def analyze_costs(
     filename: str = "costs.xlsx",
 ) -> np.array:
     """Analyze siml method results
-    
+
     Note:
         It is only available for ``siml`` learning method.
 
@@ -706,7 +802,6 @@ def analyze_costs(
 
     Returns:
         np.array: return analysis results.
-
     """
     iteration1 = len(siml_results)
     iteration2 = len(siml_results)
@@ -738,3 +833,83 @@ def analyze_costs(
         return l12_summary
     else:
         raise NameError(f"Two results are not match! Please check them firstly!")
+
+
+class Analysis:
+    """Analysis class for prediction results
+
+    Args:
+        filename (str): the results filename (the suffix should be `.pkl`). For example,
+            "bandgaps.pkl".
+        method (str): the model method name, like "siml", "basis1", "basis2" or others.
+            Defaults to "siml".
+
+    Attributes:
+        results (list): the loaded results object.
+        method (str): the model method name, like "siml", "basis1", "basis2" or others.
+        summarys (list): evaluation metircs for all iterations.
+        metrics (list): the average evaluation metrics for all iterations.
+
+    Examples:
+        >>> from SIML.analysis import Analysis
+        >>> tasks = [
+                ["468", "basis1", "3"],
+                ["3895", "basis1", "3"],
+            ]
+
+        >>> for task in tasks:  # Only print the results
+                filename = f"results/results_{task[0]}_{task[1]}_{task[2]}.pkl"
+                method = task[1]
+                a1 = Analysis(filename, method)
+                print(a1)
+
+        >>> for task in tasks:  # Save analysis results to excel files
+                filename = f"results/results_{task[0]}_{task[1]}_{task[2]}.pkl"
+                method = task[1]
+                a1 = Analysis(filename, method)
+                filename = f"results/results_analysis_{task[0]}_{task[1]}_{task[2]}}.xlsx"
+                a1.save(filename)
+    """
+
+    def __init__(self, filename: str, method: str = "siml") -> None:
+        results = load_pkl(filename)
+        self.results = results
+        self.method = method
+        summarys = analyze_results(results, method)
+        summarys_mean = analyze_summarys(summarys)
+        self.summarys = summarys
+        self.metrics = summarys_mean
+
+    def save(self, filename: str) -> None:
+        """Save metrics into excel file
+
+        Args:
+            filename (str): The filename you want to save data into
+        """
+        save_metrics(self.metrics, filename)
+
+    def __str__(self) -> str:
+        metrics = self.metrics
+        names = ["Metrics", "Training", "Validation", "Test"]
+        msg = (
+            f"**************************************\n"
+            f"The results of {self.method}:\n\n"
+            f"{names[0]:<11}{names[1]:<20}{names[2]:<20}{names[3]}\n"
+            f"MAE        {metrics[0]:.3f} ± {metrics[1]:<12.3f}"
+            f"{metrics[12]:.3f} ± {metrics[13]:<12.3f}"
+            f"{metrics[24]:.3f} ± {metrics[25]:.3f}\n"
+            f"Maj MAE    {metrics[2]:.3f} ± {metrics[3]:<12.3f}"
+            f"{metrics[14]:.3f} ± {metrics[15]:<12.3f}"
+            f"{metrics[26]:.3f} ± {metrics[27]:.3f}\n"
+            f"Min MAE    {metrics[4]:.3f} ± {metrics[5]:<12.3f}"
+            f"{metrics[16]:.3f} ± {metrics[17]:<12.3f}"
+            f"{metrics[28]:.3f} ± {metrics[29]:.3f}\n"
+            f"Variance   {metrics[6]:<20.3f}{metrics[18]:<20.3f}{metrics[30]:.3f}\n"
+            f"RMSE       {metrics[7]:<20.3f}{metrics[19]:<20.3f}{metrics[31]:.3f}\n"
+            f"Maj RMSE   {metrics[8]:<20.3f}{metrics[20]:<20.3f}{metrics[32]:.3f}\n"
+            f"Min RMSE   {metrics[9]:<20.3f}{metrics[21]:<20.3f}{metrics[33]:.3f}\n"
+            f"MAPE       {metrics[10]:<20.3f}{metrics[22]:<20.3f}{metrics[34]:.3f}\n"
+            f"R2         {metrics[11]:<20.3f}{metrics[23]:<20.3f}{metrics[35]:.3f}\n"
+            f"**************************************"
+        )
+        return msg
