@@ -1,19 +1,19 @@
-import pprint
-import sys
+import os
+import itertools
 import time
 from collections import Counter, defaultdict
 from functools import wraps
-from multiprocessing import Pool
 from typing import Tuple
 
-import numba as nb
 import numpy as np
 import pandas as pd
-from joblib import Parallel, delayed, wrap_non_picklable_objects
-from sklearnex import patch_sklearn
-
-patch_sklearn()
+from joblib import Parallel, delayed
 from mpi4py import MPI
+
+if os.getenv("INTELEX", False):
+    from sklearnex import patch_sklearn
+    patch_sklearn()
+
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.svm import SVR
@@ -24,8 +24,6 @@ from SIML.analysis import evaluation, index_to_name
 from SIML.cv import DatasetSize
 
 
-# @delayed
-# @wrap_non_picklable_objects
 def timer(func):
     """A wrapper to calculate the cpu time required by function excution
 
@@ -55,38 +53,41 @@ class SIML(DatasetSize):
 
     Args:
         data (pd.DataFrame): the dataset with features and property.
-        method (str, optional): the method name, supporting "basis1", "basis2" and 
+        method (str, optional): the method name, supporting "basis1", "basis2" and
             "siml". Defaults to "siml".
-        basic_model (str, optional): the name of basic model, supporting "SVR", "DT" 
+        basic_model (str, optional): the name of basic model, supporting "SVR", "DT"
             and "RF". Defaults to "SVR".
-        cv_method (str, optional): the cross validation method, supporting "basis1", 
+        cv_method (str, optional): the cross validation method, supporting "basis1",
             "pls", "jpcl" and "siml". Defaults to "siml" if None or not one of them.
-        sampling_method (srt, optional): the resampling method, supporting "None", 
+        sampling_method (srt, optional): the resampling method, supporting "None",
             "oversampling" and "undersampling". Defaults to None.
-        threshold (float, optional): the value to split majority and minority. Defaults 
+        threshold (float, optional): the value to split majority and minority. Defaults
             to 5.0 (for bandgap).
-        n_jobs (int, optional): the number of desired processors for parallel. It will 
+        n_jobs (int, optional): the number of desired processors for parallel. It will
             be ignored if MPI is used. Defaults to 1.
-        eta (float, optional): the step size for updating hyperparameters. It's for ``C`` 
+        eta (float, optional): the step size for updating hyperparameters. It's for ``C``
             if SVR. Defaults to 1.0.
         delta (float, optional): the step size for updating the weight. Defaults to 0.5.
-        tolerance (float, optional): the tolerance for acceptable error, helpful for 
+        tolerance (float, optional): the tolerance for acceptable error, helpful for
             converage. Defaults to 0.005.
-        op_method (str, optional): the optimization order in SIML, including "O1"~"O4". 
-            They are corresponding to "error_ascend", "error_descend", "property_ascend" 
+        op_method (str, optional): the optimization order in SIML, including "O1"~"O4".
+            They are corresponding to "error_ascend", "error_descend", "property_ascend"
             and "property_descend". Defaults to "O1".
-        ranges (list, optional): error levels, the time of acceptable error. Defaults to 
+        ranges (list, optional): error levels, the time of acceptable error. Defaults to
             [5, 4, 3, 2, 1].
-        multiples (list, optional): weight levels, the time of ``delta``. Defaults to 
+        multiples (list, optional): weight levels, the time of ``delta``. Defaults to
             [5, 4, 3, 2, 1].
-        random_state (int, optional): the random seed for sampling process. 
+        random_state (int, optional): the random seed for sampling process.
             Defaults to 3.
-        wMAE (bool, optional): using weighted MAE if true, otherwise normal MAE. 
+        wMAE (bool, optional): using weighted MAE if true, otherwise normal MAE.
             Defaults to False.
-        DEBUG (bool, optional): enable DEBUG mode if true, otherwise disable. Defaults 
+        DEBUG (bool, optional): enable DEBUG mode if true, otherwise disable. Defaults
             to False.
-        CHECK (bool, optional): enable checking the process of learning weight if true, 
+        CHECK (bool, optional): enable checking the process of learning weight if true,
             otherwise disable. Defaults to False.
+        mpi_mode (bool, optional): enable mpi to accelerate computing, which supports
+            single nodes multiple threads or multiple nodes multiple threads. Defaults
+            to False.
 
     Attributes:
         increments (np.array): real vaules of increments for the weight.
@@ -125,6 +126,7 @@ class SIML(DatasetSize):
             )
 
     """
+
     def __init__(
         self,
         data: pd.DataFrame,
@@ -144,6 +146,7 @@ class SIML(DatasetSize):
         wMAE: bool = False,
         DEBUG: bool = False,
         CHECK: bool = False,
+        mpi_mode: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(data, cv_method, sampling_method, threshold)
@@ -159,6 +162,7 @@ class SIML(DatasetSize):
         self.wMAE = wMAE
         self.DEBUG = DEBUG
         self.CHECK = CHECK
+        self.mpi_mode = mpi_mode
         self.increments = np.array([round(i * self.delta, 3) for i in multiples])
         self.parameters = defaultdict(int)
 
@@ -173,6 +177,7 @@ class SIML(DatasetSize):
             print(f"'n_jobs' cannot be 0\nIt will be forced into 1")
             n_jobs = 1
         self.n_jobs = n_jobs
+        self.parameters["n_jobs"] = n_jobs
         if self.parameters["epsilon"]:
             self.limit = round(self.parameters["epsilon"] + tolerance, 6)
         else:
@@ -350,7 +355,7 @@ class SIML(DatasetSize):
 
         counts = Counter(df[3])
         result.append(index_to_name(data, list(counts.keys())))
-        result.append(counts.values())
+        result.append(np.array(list(counts.values())))
 
         # result.append(list(parameters.keys()))
         # result.append(list(parameters.values()))
@@ -370,7 +375,21 @@ class SIML(DatasetSize):
         iterations = self.iterations
         n_jobs = self.n_jobs
 
-        if n_jobs == 1:
+        if self.mpi_mode:
+            comm = MPI.COMM_WORLD
+            rank = comm.Get_rank()
+            size = comm.Get_size()
+            local_data_offset = np.linspace(0, iterations, size + 1).astype("int")
+            local_data = splited_data[
+                local_data_offset[rank] : local_data_offset[rank + 1]
+            ]
+            local_results = []
+            for df in local_data:
+                local_result = self.__predict__(df)
+                local_results.append(local_result)
+            results = comm.allgather(local_results)
+            results = list(itertools.chain(*results))
+        elif n_jobs == 1:
             results = []
             pbar = tqdm(total=iterations)
             pbar.set_description("Basis 2")
@@ -585,14 +604,11 @@ class SIML(DatasetSize):
         return coef, error, step, delta
 
     @timer
-    # @nb.jit()
-    # @delayed
-    # @wrap_non_picklable_objects
     def predict_with_iml(self, dataset: np.array) -> np.array:
         """Imbalance Learning main function
 
         Args:
-            dataset (np.array): splitted dataset of instance indexes, including majority
+            dataset (np.array): split dataset of instance indexes, including majority
                 training, majority validation, majority test, minority training, minority
                 validation and minority test sets (totally 6 sets).
 
@@ -838,7 +854,7 @@ class SIML(DatasetSize):
             #         sys.exit(1)
 
         # Trackback
-        if IS_FLAT and delta <= self.increments[0]:
+        if DEBUG and IS_FLAT and delta <= self.increments[0]:
             print(f"")
         else:
             coef, error, step = self.iml_learn_track(
@@ -961,7 +977,7 @@ class SIML(DatasetSize):
         To handle the computing mode: single core or parallel with multiple cores.
 
         Returns:
-            results (list): return prediction results for splited datasets.
+            results (list): return prediction results for split datasets.
 
         """
         splited_data = self.splited_data
@@ -1000,7 +1016,21 @@ class SIML(DatasetSize):
 
         # predict_with_iml = self.predict_with_iml
 
-        if n_jobs == 1:
+        if self.mpi_mode:
+            comm = MPI.COMM_WORLD
+            rank = comm.Get_rank()
+            size = comm.Get_size()
+            local_data_offset = np.linspace(0, iterations, size + 1).astype("int")
+            local_data = splited_data[
+                local_data_offset[rank] : local_data_offset[rank + 1]
+            ]
+            local_results = []
+            for df in local_data:
+                local_result = self.predict_with_iml(df)
+                local_results.append(local_result)
+            results = comm.allgather(local_results)
+            results = list(itertools.chain(*results))
+        elif n_jobs == 1:
             results = []
             pbar = tqdm(total=iterations)
             pbar.set_description("SIML")
@@ -1012,8 +1042,6 @@ class SIML(DatasetSize):
             results = Parallel(n_jobs, verbose=3)(
                 delayed(self.predict_with_iml)(splited_data[i])
                 for i in tqdm(range(iterations))
-                # delayed(self.predict_with_iml)(dataset)
-                # for dataset in splited_data
             )
 
         return results
