@@ -48,6 +48,7 @@ Indices and tables
 
    api/SIML.Features
    api/SIML.CV
-   api/SIML.Method
+   api/SIML.Model
    api/SIML.Analytics
    api/SIML.Plot
+   api/SIML.Utils

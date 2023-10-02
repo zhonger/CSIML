@@ -1,7 +1,7 @@
-SIML.cross_validation
+SIML.utils
 ---------------------
 
-.. automodule:: SIML.cross_validation
+.. automodule:: SIML.utils
    :members:
    :undoc-members:
    :show-inheritance:

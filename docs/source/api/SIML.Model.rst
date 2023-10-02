@@ -1,7 +1,7 @@
-SIML.method
+SIML.model
 -----------------------
 
-.. automodule:: SIML.method
+.. automodule:: SIML.model
    :members:
    :undoc-members:
    :show-inheritance:

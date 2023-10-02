@@ -1,4 +1,4 @@
-"""Features initialization module"""
+"""Initialization for features module"""
 
 from .features import make_features
 
