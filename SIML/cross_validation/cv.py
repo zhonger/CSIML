@@ -1,5 +1,5 @@
+"""Cross validation methods"""
 import math
-from dataclasses import dataclass
 from random import sample, seed
 from typing import Tuple
 
@@ -9,72 +9,7 @@ from imblearn.over_sampling import RandomOverSampler
 from imblearn.under_sampling import RandomUnderSampler
 from sklearn.model_selection import ShuffleSplit
 
-
-@dataclass
-class Setting:
-    """A datacalss for splitting setting
-
-    Args:
-        majority_pro (float): the proportion for majority.
-        minority_pro (float): the proportion for majority.
-        majority_test_num (int): majority test size (only for ``basis1`` cross
-            validation method).
-        majority_set (np.array): the indexes of majority set.
-        minority_set (np.array): the indexes of minority set.
-        random_state (int): the random seed for random sampling.
-
-    """
-
-    majority_pro: float
-    minority_pro: float
-    majority_test_num: int
-    random_state: int
-    majority_set: np.array
-    minority_set: np.array
-
-
-@dataclass
-class DataSize:
-    """A dataclass for data size description
-
-    Args:
-        total (int): the number of all data.
-        train (int): the number of training data. Defaults to 0.
-        validation (int): the number of validation data. Defaults to 0.
-        test (int): the number of test data. Defaults to 0.
-
-    """
-
-    total: int
-    train: int = 0
-    validation: int = 0
-    test: int = 0
-
-    def __str__(self) -> str:
-        """Print data size"""
-        msg = (
-            f"Total: {self.total}, Train: {self.train}, "
-            f"Validation: {self.validation}, Test: {self.test}"
-        )
-        return msg
-
-    def set(self, values: dict) -> None:
-        """Set values for specified attributes
-
-        Args:
-            values (dict): a dict for attributes, supporting "Total", "Train",
-                "Validation" and "Test".
-
-        Raises:
-            AttributeError: when setting a inavailable attribute.
-
-        """
-        for key, value in values.items():
-            try:
-                getattr(self, key.lower())
-                setattr(self, key.lower(), value)
-            except AttributeError:
-                raise AttributeError(f"{key} is not available.")
+from ._dataclass import DataSize, Setting
 
 
 class DatasetSize:
@@ -93,6 +28,7 @@ class DatasetSize:
     Note:
         The iteration of supported ``cv_method``:
             - ``siml``: (4:1)4:1 (5-fold CV, 5x5x5x5=625 iterations)
+            - ``op``: (4:1)4:1 (5-fold CV, 5 iterations)
             - ``pls``:  1,2,3,4,5,6,7,... (10-fold CV, 10 iterations)
             - ``jpcl``: 1,2,3,4,5,1,2,3,4,5,... (5-fold CV, 5 iterations)
             - ``basis1``: 24 (test), 4:1(Train vs Validation) (5-fold CV, 5 iterations)
@@ -102,7 +38,6 @@ class DatasetSize:
         minority (DataSize): including 'total', 'train', 'validation', 'test'.
         splited_data (numpy.array): the splited indexes of data in cross validation.
         iterations (int): the iteration of cross validation.
-
     """
 
     def __init__(
@@ -117,6 +52,7 @@ class DatasetSize:
         self.size = data.shape[0]
         self.cv_method = cv_method
         self.sampling_method = sampling_method
+        self.threshold = threshold
         majority_total = len(data[data["Experimental"] < threshold])
         minority_total = self.size - majority_total
         self.majority = DataSize(majority_total)
@@ -134,8 +70,7 @@ class DatasetSize:
 
         Args:
             majority (dict): supporting "Total", "Train", "Validation" and "Test".
-            minority (dict): supporting "Total", "Train", "Validation" and "Test".
-
+            minority (dict): supporting "Total", "Train", "Validation" xand "Test".
         """
         self.majority.set(majority)
         self.minority.set(minority)
@@ -148,7 +83,6 @@ class DatasetSize:
 
         Returns:
             Tuple[dict, dict]: return majority and minority dicts.
-
         """
         k = 1 / fold
 
@@ -191,7 +125,6 @@ class DatasetSize:
                 Defaults to 0.2.
             majority_test_num (int, optional): majority test size (only for
                 ``basis1`` cross validation method). Defaults to 24.
-
         """
         cv_method = self.cv_method
         sampling_method = self.sampling_method
@@ -262,9 +195,9 @@ class DatasetSize:
 
         Returns:
             Tuple[list, list]: return splitted X and y.
-
         """
-        ros = RandomOverSampler(random_state=random_state)
+        # ros = RandomOverSampler(random_state=random_state)
+        ros = RandomOverSampler()
         X_resampled, y_resampled = ros.fit_resample(X, y)
         return X_resampled, y_resampled
 
@@ -280,7 +213,6 @@ class DatasetSize:
 
         Returns:
             Tuple[list, list]: return splitted X and y.
-
         """
         rus = RandomUnderSampler(random_state=random_state)
         X_resampled, y_resampled = rus.fit_resample(X, y)
@@ -291,7 +223,6 @@ class DatasetSize:
         majority_train: list,
         minority_train: list,
         random_state: int = 3,
-        threshold: float = 5.0,
     ) -> Tuple[list, list]:
         """Help function for over sampling and under sampling
 
@@ -302,24 +233,18 @@ class DatasetSize:
 
         Returns:
             Tuple[list, list]: return majority and minority training sets.
-
         """
         data = self.data
         sampling_method = self.sampling_method
-
+        y = data.iloc[:, 1].values
+        train = np.append(majority_train, minority_train)
+        c = y[train] <= self.threshold
+        train = train[:, np.newaxis]
         if sampling_method == "oversampling":
-            y = data.iloc[:, 1].values
-            train = np.append(majority_train, minority_train)
-            c = y[train] <= threshold
-            train = train[:, np.newaxis]
             train_resample, c = self.over_sampling(train, c, random_state=random_state)
             train_resample = train_resample.flatten()
             minority_train = train_resample[len(majority_train) :]
         elif sampling_method == "undersampling":
-            y = data.iloc[:, 1].values
-            train = np.append(majority_train, minority_train)
-            c = y[train] <= threshold
-            train = train[:, np.newaxis]
             train_resample, c = self.under_sampling(train, c, random_state=random_state)
             train_resample = train_resample.flatten()
             majority_train = train_resample[len(minority_train) :]
@@ -331,8 +256,8 @@ class DatasetSize:
         majority_pro: float = 0.2,
         minority_pro: float = 0.2,
         random_state: int = 3,
-        threshold: float = 5.0,
         majority_test_num: int = 24,
+        **kws,
     ) -> None:
         """Split dataset into training, validation and test sets
 
@@ -346,20 +271,21 @@ class DatasetSize:
                 and minority. Defaults to 5.0 (for bandgap).
             majority_test_num (int, optional): majority test size (only for
                 ``basis1`` cross validation method). Defaults to 24.
-
         """
         data = self.data
         data_size = self.size
         cv_method = self.cv_method
-        majority_size = len(data[data["Experimental"] < threshold])
+        majority_size = len(data[data["Experimental"] < self.threshold])
         minority_size = data_size - majority_size
         majority_set = np.arange(majority_size)
         minority_set = np.arange(data_size)[-minority_size:]
+        random_state2 = kws.get("random_state2", random_state)
         settings = Setting(
             majority_pro,
             minority_pro,
             majority_test_num,
             random_state,
+            random_state2,
             majority_set,
             minority_set,
         )
@@ -383,11 +309,11 @@ class DatasetSize:
 
         Args:
             settings (Setting): for splitting.
-
         """
         majority_pro = settings.majority_pro
         minority_pro = settings.minority_pro
         random_state = settings.random_state
+        random_state2 = settings.random_state2
         majority = settings.majority_set
         minority = settings.minority_set
 
@@ -417,7 +343,7 @@ class DatasetSize:
                         minority_test = minority[min_t]
 
                         majority_train, minority_train = self.resampling(
-                            majority_train, minority_train, random_state
+                            majority_train, minority_train, random_state2
                         )
 
                         cv_data.append(majority_train)
@@ -436,7 +362,6 @@ class DatasetSize:
 
         Args:
             settings (Setting): for splitting.
-
         """
         majority_pro = settings.majority_pro
         random_state = settings.random_state
@@ -474,9 +399,9 @@ class DatasetSize:
         Args:
             settings (Setting): for splitting.
             fold (int, optional): the fold for cross validation. Defaults to 10.
-
         """
         random_state = settings.random_state
+        random_state2 = settings.random_state2
         majority = settings.majority_set
         minority = settings.minority_set
         cv_method = self.cv_method
@@ -517,7 +442,7 @@ class DatasetSize:
             minority_train = np.delete(minority, minority_validation_indexes)
 
             majority_train, minority_train = self.resampling(
-                majority_train, minority_train, random_state
+                majority_train, minority_train, random_state2
             )
 
             cv_data.append(majority_train)

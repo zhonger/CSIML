@@ -1,3 +1,4 @@
+"""Analysis module"""
 import pickle
 import time
 from collections import defaultdict
@@ -26,12 +27,13 @@ def evaluation(y: np.array, y_pred: np.array) -> dict:
     Returns:
         dict: return metrics dict.
     """
+    # error = y_pred - y
     error = abs(y - y_pred)
     mae = mean_absolute_error(y, y_pred)
     rmse = mean_squared_error(y, y_pred, squared=False)
     mape = mean_absolute_percentage_error(y, y_pred)
     r2 = r2_score(y, y_pred)
-    std = np.std(y - y_pred)
+    std = np.std(y_pred - y)
     metrics = {
         "error": error,
         "mae": mae,
@@ -55,7 +57,6 @@ class ResData:
         y_minority (list): all y minority values
         y_minority_pred (list): all y minority prediction values
     """
-
     y: list
     y_pred: list
     y_majority: list
@@ -89,8 +90,8 @@ def evaluation_batch(res: ResData) -> list:
     ]
     metric_values = []
     for task in tasks:
-        y = res.__getattribute__(task[0])
-        y_pred = res.__getattribute__(task[1])
+        y = getattr(res, task[0])
+        y_pred = getattr(res, task[1])
         metric = task[2]
         metric_value = evaluation_metric(y, y_pred, metric)
         metric_values.append(metric_value)
@@ -126,19 +127,16 @@ def evaluation_metric(y: np.array, y_pred: np.array, metric: str) -> float:
     Returns:
         float: The evaluation metric value.
     """
-    match metric:
-        case "mae":
-            return mean_absolute_error(y, y_pred)
-        case "mae_std":
-            return np.std(abs(y - y_pred))
-        case "rmse":
-            return mean_squared_error(y, y_pred)
-        case "variance":
-            return median_absolute_error(y, y_pred)
-        case "mape":
-            return mean_absolute_percentage_error(y, y_pred)
-        case "r2":
-            return r2_score(y, y_pred)
+    METRIC = {
+        "mae": mean_absolute_error(y, y_pred),
+        "mae_std": np.std(y_pred - y),
+        "mse": mean_squared_error(y, y_pred),
+        "rmse": mean_squared_error(y, y_pred, squared=False),
+        "mape": mean_absolute_percentage_error(y, y_pred),
+        "r2": r2_score(y, y_pred),
+        "variance": median_absolute_error(y, y_pred),
+    }
+    return METRIC.get(metric)
 
 
 def analyze_results(results: np.array, method: str) -> np.array:
@@ -490,30 +488,35 @@ def save_metrics(metrics: list, csvfile: str = "summary.xlsx") -> None:
 
     header = ["Training", "Validation", "Test"]
     print_metrics = pd.DataFrame(print_metrics).T
-    with pd.ExcelWriter(csvfile, mode="w") as writer:
-        print_metrics.to_excel(
-            excel_writer=writer, sheet_name="summary", header=header, index=None
-        )
+    kws = {"sheet_name": "summary", "header": header}
+    write_excel(print_metrics, csvfile, "w", **kws)
+    # with pd.ExcelWriter(csvfile, mode="w") as writer:
+    #     print_metrics.to_excel(
+    #         excel_writer=writer, sheet_name="summary", header=header, index=None
+    #     )
 
 
 def save_metrics_batch(
     dataset: str = "468",
     path: str = "results",
-    methods: list = ["basis1", "basis2", "oversampling", "undersampling", "siml"],
-    random_states: list = [1, 3, 5, 10, 15, 20, 30, 35, 40, 45, 50],
     decimal: int = 3,
+    **kws,
 ):
     """Save metrics with a batch for different random seeds
 
     Args:
         dataset (str, optional): the name of dataset. Defaults to "468".
         path (str, optional): the path of result files. Defaults to "results".
-        methods (list, optional): learning methods. Defaults to ["basis1", "basis2", 
+        methods (list, optional): learning methods. Defaults to ["basis1", "basis2",
             "oversampling", "undersampling", "siml"].
-        random_states (list, optional): random seed list. Defaults to [1, 3, 5, 10, 15, 
+        random_states (list, optional): random seed list. Defaults to [1, 3, 5, 10, 15,
             20, 30, 35, 40, 45, 50].
         decimal (int, optional): the decimal place for metrics. Defaults to 3.
     """
+    methods = kws.get(
+        "methods", ["basis1", "basis2", "oversampling", "undersampling", "siml"]
+    )
+    random_states = kws.get("random_states", [1, 3, 5, 10, 15, 20, 30, 35, 40, 45, 50])
     n = 0
     for random_state in random_states:
         ob = []
@@ -546,12 +549,16 @@ def save_metrics_batch(
                 summary = np.vstack((summary, print_metrics))
 
         df = pd.DataFrame(np.array(summary))
+        filename = f"summary/{dataset}_{path}.xlsx"
+        kws = {"sheet_name": random_state}
         if n == 0:
-            with pd.ExcelWriter(f"summary/{dataset}_{path}.xlsx", mode="w") as f:
-                df.to_excel(f, sheet_name=f"{random_state}", header=None, index=None)
+            write_excel(df, filename, "w", **kws)
+            # with pd.ExcelWriter(f"summary/{dataset}_{path}.xlsx", mode="w") as f:
+            #     df.to_excel(f, sheet_name=f"{random_state}", header=None, index=None)
         else:
-            with pd.ExcelWriter(f"summary/{dataset}_{path}.xlsx", mode="a") as f:
-                df.to_excel(f, sheet_name=f"{random_state}", header=None, index=None)
+            write_excel(df, filename, "a", **kws)
+            # with pd.ExcelWriter(f"summary/{dataset}_{path}.xlsx", mode="a") as f:
+            #     df.to_excel(f, sheet_name=f"{random_state}", header=None, index=None)
         n += 1
         print(f"Random seed {random_state} has been saved.")
 
@@ -592,24 +599,42 @@ def save_result(
     """
     for i, result in enumerate(results):
         result = pd.DataFrame(result).T
+        sheet_name = f"iteration-{(iteration*25+i)}"
+        kws = {"sheet_name": sheet_name, "header": header, "index": index}
         try:
-            with pd.ExcelWriter(
-                path=filename, mode="a", if_sheet_exists="replace"
-            ) as writer:
-                result.to_excel(
-                    excel_writer=writer,
-                    sheet_name=f"iteration-{(iteration*25+i)}",
-                    header=header,
-                    index=index,
-                )
+            write_excel(result, filename, "a", if_sheet_exists="replace", **kws)
+            # with pd.ExcelWriter(
+            #     path=filename, mode="a", if_sheet_exists="replace"
+            # ) as writer:
+            #     result.to_excel(
+            #         excel_writer=writer,
+            #         sheet_name=f"iteration-{(iteration*25+i)}",
+            #         header=header,
+            #         index=index,
+            #     )
         except FileExistsError:
-            with pd.ExcelWriter(path=filename, mode="w") as writer:
-                result.to_excel(
-                    excel_writer=writer,
-                    sheet_name=f"iteration-{(iteration*25+i)}",
-                    header=header,
-                    index=index,
-                )
+            write_excel(result, filename, "w", **kws)
+            # with pd.ExcelWriter(path=filename, mode="w") as writer:
+            #     result.to_excel(
+            #         excel_writer=writer,
+            #         sheet_name=f"iteration-{(iteration*25+i)}",
+            #         header=header,
+            #         index=index,
+            #     )
+
+
+def write_excel(result: pd.DataFrame, path: str, mode: str, **kws):
+    if_sheet_exists = kws.get("if_sheet_exists", None)
+    sheet_name = kws.get("sheet_name", "Sheet1")
+    header = kws.get("header", None)
+    index = kws.get("index", None)
+    with pd.ExcelWriter(path, mode=mode, if_sheet_exists=if_sheet_exists) as writer:
+        result.to_excel(
+            excel_writer=writer,
+            sheet_name=sheet_name,
+            header=header,
+            index=index,
+        )
 
 
 def save_results(results: pd.DataFrame, filename: str, n_jobs: int = 25) -> None:
@@ -653,8 +678,8 @@ def load_pkl(filename: str) -> list:
         with open(filename, "rb") as file:
             results = pickle.load(file)
         return results
-    except FileNotFoundError:
-        raise FileNotFoundError(f"{filename} not found")
+    except FileNotFoundError as e:
+        raise FileNotFoundError(f"{filename} not found") from e
 
 
 def load_result(filename: str, sheet_name: str) -> np.array:
@@ -677,8 +702,8 @@ def load_result(filename: str, sheet_name: str) -> np.array:
         for _, row in data.iterrows():
             result.append(row.dropna(axis=0).values)
         return result
-    except FileNotFoundError:
-        raise FileNotFoundError(f"{filename} not found.")
+    except FileNotFoundError as e:
+        raise FileNotFoundError(f"{filename} not found.") from e
 
 
 def load_results(filename: str, parallel: bool = False) -> np.array:
@@ -715,8 +740,8 @@ def load_results(filename: str, parallel: bool = False) -> np.array:
                 f"Loading {filename} used {(end_at - start_at)}(s) " f"without parallel"
             )
         return results
-    except FileNotFoundError:
-        raise FileNotFoundError(f"{filename} not found.")
+    except FileNotFoundError as e:
+        raise FileNotFoundError(f"{filename} not found.") from e
 
 
 def load_summarys(metrics_filename: str) -> np.array:
@@ -744,8 +769,8 @@ def load_summarys(metrics_filename: str) -> np.array:
             op_summarys.append(op_summary)
 
         return op_summarys
-    except FileNotFoundError:
-        raise FileNotFoundError(f"{metrics_filename} is not found.")
+    except FileNotFoundError as e:
+        raise FileNotFoundError(f"{metrics_filename} is not found.") from e
 
 
 def save_analyzed_result(
@@ -762,22 +787,27 @@ def save_analyzed_result(
     """
     for i, result in enumerate(results):
         result = pd.DataFrame(result)
+        sheet_name = f"iteration-{(iteration*25+i)}"
         try:
-            with pd.ExcelWriter(
-                path=filename, mode="a", if_sheet_exists="replace"
-            ) as writer:
-                result.to_excel(
-                    excel_writer=writer,
-                    sheet_name=f"iteration-{(iteration*25+i)}",
-                    index=None,
-                )
+            kws = {"if_sheet_exists": "replace", "sheet_name": sheet_name}
+            write_excel(result, filename, "a", **kws)
+            # with pd.ExcelWriter(
+            #     path=filename, mode="a", if_sheet_exists="replace"
+            # ) as writer:
+            #     result.to_excel(
+            #         excel_writer=writer,
+            #         sheet_name=f"iteration-{(iteration*25+i)}",
+            #         index=None,
+            #     )
         except FileExistsError:
-            with pd.ExcelWriter(path=filename, mode="w") as writer:
-                result.to_excel(
-                    excel_writer=writer,
-                    sheet_name=f"iteration-{(iteration*25+i)}",
-                    index=None,
-                )
+            kws = {"sheet_name": sheet_name}
+            write_excel(result, filename, "w", **kws)
+            # with pd.ExcelWriter(path=filename, mode="w") as writer:
+            #     result.to_excel(
+            #         excel_writer=writer,
+            #         sheet_name=f"iteration-{(iteration*25+i)}",
+            #         index=None,
+            #     )
 
 
 def analyze_costs(
@@ -832,7 +862,7 @@ def analyze_costs(
         save_analyzed_result(l12_summary, filename)
         return l12_summary
     else:
-        raise NameError(f"Two results are not match! Please check them firstly!")
+        raise NameError("Two results are not match! Please check them firstly!")
 
 
 class Analysis:
@@ -889,27 +919,30 @@ class Analysis:
         save_metrics(self.metrics, filename)
 
     def __str__(self) -> str:
-        metrics = self.metrics
-        names = ["Metrics", "Training", "Validation", "Test"]
-        msg = (
-            f"**************************************\n"
-            f"The results of {self.method}:\n\n"
-            f"{names[0]:<11}{names[1]:<20}{names[2]:<20}{names[3]}\n"
-            f"MAE        {metrics[0]:.3f} ± {metrics[1]:<12.3f}"
-            f"{metrics[12]:.3f} ± {metrics[13]:<12.3f}"
-            f"{metrics[24]:.3f} ± {metrics[25]:.3f}\n"
-            f"Maj MAE    {metrics[2]:.3f} ± {metrics[3]:<12.3f}"
-            f"{metrics[14]:.3f} ± {metrics[15]:<12.3f}"
-            f"{metrics[26]:.3f} ± {metrics[27]:.3f}\n"
-            f"Min MAE    {metrics[4]:.3f} ± {metrics[5]:<12.3f}"
-            f"{metrics[16]:.3f} ± {metrics[17]:<12.3f}"
-            f"{metrics[28]:.3f} ± {metrics[29]:.3f}\n"
-            f"Variance   {metrics[6]:<20.3f}{metrics[18]:<20.3f}{metrics[30]:.3f}\n"
-            f"RMSE       {metrics[7]:<20.3f}{metrics[19]:<20.3f}{metrics[31]:.3f}\n"
-            f"Maj RMSE   {metrics[8]:<20.3f}{metrics[20]:<20.3f}{metrics[32]:.3f}\n"
-            f"Min RMSE   {metrics[9]:<20.3f}{metrics[21]:<20.3f}{metrics[33]:.3f}\n"
-            f"MAPE       {metrics[10]:<20.3f}{metrics[22]:<20.3f}{metrics[34]:.3f}\n"
-            f"R2         {metrics[11]:<20.3f}{metrics[23]:<20.3f}{metrics[35]:.3f}\n"
-            f"**************************************"
-        )
-        return msg
+        return metrics2msg(self.metrics, self.method)
+
+
+def metrics2msg(metrics, method):
+    names = ["Metrics", "Training", "Validation", "Test"]
+    msg = (
+        f"**************************************\n"
+        f"The results of {method}:\n\n"
+        f"{names[0]:<11}{names[1]:<20}{names[2]:<20}{names[3]}\n"
+        f"MAE        {metrics[0]:.3f} ± {metrics[1]:<12.3f}"
+        f"{metrics[12]:.3f} ± {metrics[13]:<12.3f}"
+        f"{metrics[24]:.3f} ± {metrics[25]:.3f}\n"
+        f"Maj MAE    {metrics[2]:.3f} ± {metrics[3]:<12.3f}"
+        f"{metrics[14]:.3f} ± {metrics[15]:<12.3f}"
+        f"{metrics[26]:.3f} ± {metrics[27]:.3f}\n"
+        f"Min MAE    {metrics[4]:.3f} ± {metrics[5]:<12.3f}"
+        f"{metrics[16]:.3f} ± {metrics[17]:<12.3f}"
+        f"{metrics[28]:.3f} ± {metrics[29]:.3f}\n"
+        f"Variance   {metrics[6]:<20.3f}{metrics[18]:<20.3f}{metrics[30]:.3f}\n"
+        f"RMSE       {metrics[7]:<20.3f}{metrics[19]:<20.3f}{metrics[31]:.3f}\n"
+        f"Maj RMSE   {metrics[8]:<20.3f}{metrics[20]:<20.3f}{metrics[32]:.3f}\n"
+        f"Min RMSE   {metrics[9]:<20.3f}{metrics[21]:<20.3f}{metrics[33]:.3f}\n"
+        f"MAPE       {metrics[10]:<20.3f}{metrics[22]:<20.3f}{metrics[34]:.3f}\n"
+        f"R2         {metrics[11]:<20.3f}{metrics[23]:<20.3f}{metrics[35]:.3f}\n"
+        f"**************************************"
+    )
+    return msg

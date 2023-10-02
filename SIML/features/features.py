@@ -1,9 +1,11 @@
+"""Features module"""
+
 import pandas as pd
 from matminer.featurizers.composition import ElementProperty
 from matminer.featurizers.conversions import StrToComposition
 
 
-def MakeFeatures(data: pd.DataFrame, features: list, stats: list) -> pd.DataFrame:
+def make_features(data: pd.DataFrame, features: list, stats: list) -> pd.DataFrame:
     """Make features based on MatMiner
 
     Args:
@@ -22,6 +24,7 @@ def MakeFeatures(data: pd.DataFrame, features: list, stats: list) -> pd.DataFram
     builder = ElementProperty("magpie", features, stats)
     builder.feature_labels()
     magpie_df = builder.featurize_dataframe(data, col_id="composition")
-    data = magpie_df.sort_values(by="Experimental").fillna(0).values
+    # data = magpie_df.sort_values(by="Experimental").fillna(0).values
+    data = magpie_df.sort_values(by="Experimental").fillna(0)
 
     return data

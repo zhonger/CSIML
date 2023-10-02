@@ -1,8 +1,7 @@
-import os
 import itertools
+import os
 import time
 from collections import Counter, defaultdict
-from functools import wraps
 from typing import Tuple
 
 import numpy as np
@@ -12,37 +11,17 @@ from mpi4py import MPI
 
 if os.getenv("INTELEX", False):
     from sklearnex import patch_sklearn
-    patch_sklearn()
 
+    patch_sklearn()
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.svm import SVR
 from sklearn.tree import DecisionTreeRegressor
 from tqdm import tqdm
 
-from SIML.analysis import evaluation, index_to_name
-from SIML.cv import DatasetSize
-
-
-def timer(func):
-    """A wrapper to calculate the cpu time required by function excution
-
-    Args:
-        func (function): the name of function.
-
-    """
-    @wraps(func)
-    def func_wrapper(*args, **kwargs):
-        from time import time
-
-        time_start = time()
-        result = func(*args, **kwargs)
-        time_end = time()
-        time_spend = time_end - time_start
-        print(f"{func.__name__} cost time {time_spend} s")
-        return result
-
-    return func_wrapper
+from SIML.analysis.analysis import evaluation, index_to_name
+from SIML.cross_validation.cv import DatasetSize
+from SIML.utils.timer import timer
 
 
 class SIML(DatasetSize):
@@ -140,8 +119,8 @@ class SIML(DatasetSize):
         delta: float = 0.5,
         tolerance: float = 0.005,
         op_method: str = "O1",
-        ranges: np.array = [5, 4, 3, 2, 1],
-        multiples: np.array = [5, 4, 3, 2, 1],
+        ranges: np.array = np.array([5, 4, 3, 2, 1]),
+        multiples: np.array = np.array([5, 4, 3, 2, 1]),
         random_state: int = 3,
         wMAE: bool = False,
         DEBUG: bool = False,
@@ -165,6 +144,8 @@ class SIML(DatasetSize):
         self.mpi_mode = mpi_mode
         self.increments = np.array([round(i * self.delta, 3) for i in multiples])
         self.parameters = defaultdict(int)
+        self.X = np.array([])
+        self.y = np.array([])
 
         if kwargs is not None:
             try:
@@ -174,7 +155,7 @@ class SIML(DatasetSize):
                 return None
 
         if n_jobs == 0:
-            print(f"'n_jobs' cannot be 0\nIt will be forced into 1")
+            print("'n_jobs' cannot be 0\nIt will be forced into 1")
             n_jobs = 1
         self.n_jobs = n_jobs
         self.parameters["n_jobs"] = n_jobs
@@ -236,21 +217,24 @@ class SIML(DatasetSize):
 
         return results
 
-    def preprocessing(self, ascending=False) -> None:
+    def preprocessing(self, **kws) -> None:
         """Data preprocessing
 
         It mainly includes:
             * reordering the data according to the property value ascendly.
+            * filling NaN values with 0.
             * normalizing the features with MinMaxScaler().
 
         It's optional. For bandgaps with features based on elemetns, it's needed.
 
         """
+
         data = self.data
-        if ascending:
+        if kws.get("ascending", False):
             data.sort_values(by="Experimental", inplace=True, ascending=True)
         X = data.iloc[:, 3:].fillna(0).values
-        X = MinMaxScaler().fit_transform(pd.DataFrame(X))
+        if kws.get("normalize", True):
+            X = MinMaxScaler().fit_transform(pd.DataFrame(X))
         y = data.iloc[:, 1].values
         self.X = X
         self.y = y
@@ -335,7 +319,6 @@ class SIML(DatasetSize):
 
         Returns:
             np.array: prediction result.
-
         """
         data = self.data
         X = self.X
@@ -573,7 +556,7 @@ class SIML(DatasetSize):
 
         # Optimize for the cliff (flat area)
         if DEBUG:
-            print(f"Opt cliff ->", end=" ")
+            print("Opt cliff -> ")
 
         increments = increments[increments > delta]
         k = 0
@@ -721,6 +704,11 @@ class SIML(DatasetSize):
             result.append(keys)
             result.append(values)
         else:
+            # multi = round(majority_train_size/sum(coefs),3)
+            # print(f"Multi is {multi}")
+            # sample_weights[majority_train_size:] *= multi
+            # print(sample_weights)
+            # regr, _ = self.train_model(regr, X[train, :], y[train], sample_weights)
             y_pred = regr.predict(X)
 
             for i in range(6):
@@ -739,6 +727,7 @@ class SIML(DatasetSize):
             # result.append(list(parameters.values()))
 
         # print(f"------------------------")
+        # return result, sample_weights
         return result
 
     def iml_learn(
@@ -855,7 +844,7 @@ class SIML(DatasetSize):
 
         # Trackback
         if DEBUG and IS_FLAT and delta <= self.increments[0]:
-            print(f"")
+            print("")
         else:
             coef, error, step = self.iml_learn_track(
                 train, error, sample_weights, delta, old_coef, step
@@ -918,7 +907,7 @@ class SIML(DatasetSize):
         coef_bak = old_coef + delta
 
         if DEBUG:
-            print(f"Trackback ->", end=" ")
+            print("Trackback -> ")
         if delta % increments[0] == 0:
             old_delta = delta - increments[0]
             increments = increments[increments <= increments[0]]
