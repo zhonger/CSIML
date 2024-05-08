@@ -16,7 +16,7 @@ class Setting:
         majority_set (np.array): the indexes of majority set.
         minority_set (np.array): the indexes of minority set.
         random_state (int): the random seed for random sampling.
-
+        random_state2 (int): the random seed for oversampling or undersampling.
     """
 
     majority_pro: float
@@ -57,7 +57,8 @@ class DataSize:
 
         Args:
             values (dict): a dict for attributes, supporting "Total", "Train",
-                "Validation" and "Test".
+                "Validation" and "Test". For example, {"Total": 20, "Train": "10", 
+                "Validation": 8, "Test": 2}.
 
         Raises:
             AttributeError: when setting a inavailable attribute.

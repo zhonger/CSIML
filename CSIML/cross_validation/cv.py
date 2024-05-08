@@ -75,7 +75,7 @@ class DatasetSize:
         self.majority.set(majority)
         self.minority.set(minority)
 
-    def k_fold_size(self, fold: int = 10) -> Tuple[dict, dict]:
+    def cal_k_fold_size(self, fold: int = 10) -> Tuple[dict, dict]:
         """Calculate the size when using k fold cross validation method
 
         Args:
@@ -132,9 +132,9 @@ class DatasetSize:
         minority_total = self.minority.total
 
         if cv_method == "pls":
-            majority, minority = self.k_fold_size()
+            majority, minority = self.cal_k_fold_size()
         elif cv_method == "jpcl":
-            majority, minority = self.k_fold_size(5)
+            majority, minority = self.cal_k_fold_size(5)
         else:
             if cv_method == "basis1":
                 majority_test = majority_test_num
@@ -196,8 +196,7 @@ class DatasetSize:
         Returns:
             Tuple[list, list]: return splitted X and y.
         """
-        # ros = RandomOverSampler(random_state=random_state)
-        ros = RandomOverSampler()
+        ros = RandomOverSampler(random_state=random_state)
         X_resampled, y_resampled = ros.fit_resample(X, y)
         return X_resampled, y_resampled
 
@@ -267,15 +266,18 @@ class DatasetSize:
             minority_pro (float, optional): the proportion for minority.
                 Defaults to 0.2.
             random_state (int, optional): random seed. Defaults to 3.
-            threshold (float, optional): the threshold to distinguish majority
-                and minority. Defaults to 5.0 (for bandgap).
             majority_test_num (int, optional): majority test size (only for
                 ``basis1`` cross validation method). Defaults to 24.
+            threshold (float, optional): the threshold to distinguish majority
+                and minority. Defaults to 5.0 (for bandgap).
+            random_state2 (int, optional): random seed for oversampling or undersampling.
+                Defaults to the same with `random_state`.
         """
         data = self.data
         data_size = self.size
         cv_method = self.cv_method
-        majority_size = len(data[data["Experimental"] < self.threshold])
+        threshold = kws.get("threshold", self.threshold)
+        majority_size = len(data[data["Experimental"] < threshold])
         minority_size = data_size - majority_size
         majority_set = np.arange(majority_size)
         minority_set = np.arange(data_size)[-minority_size:]
