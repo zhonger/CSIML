@@ -24,7 +24,6 @@ def make_features(data: pd.DataFrame, features: list, stats: list) -> pd.DataFra
     builder = ElementProperty("magpie", features, stats)
     builder.feature_labels()
     magpie_df = builder.featurize_dataframe(data, col_id="composition")
-    # data = magpie_df.sort_values(by="Experimental").fillna(0).values
     data = magpie_df.sort_values(by="Experimental").fillna(0)
 
     return data
