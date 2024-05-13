@@ -1,4 +1,5 @@
 """The module for Basis2 model"""
+
 import itertools
 import os
 from collections import Counter
@@ -7,7 +8,7 @@ import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
 from mpi4py import MPI
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 if os.getenv("INTELEX", "False") == "True":
     from sklearnex import patch_sklearn
@@ -15,13 +16,26 @@ if os.getenv("INTELEX", "False") == "True":
     patch_sklearn()
 
 
-from SIML.analysis.analysis import index_to_name
-from SIML.utils.timer import timer
-
-from ._base import BaseModel
+from CSIML.analysis.analysis import index_to_name
+from CSIML.model._base import BaseModel
+from CSIML.utils.timer import timer
 
 
 class Basis2Model(BaseModel):
+    """Basis2 method, training with majority and minority set
+
+    Args:
+        data (pd.DataFrame): the dataset.
+        basic_model (str, optional): the basic machine learning model. Defaults to "SVR".
+        cv_method (str, optional): cross validation method. Defaults to "siml".
+        mpi_mode (bool, optional): whether using mpi to parallel. Defaults to False.
+        show_tips (bool, optional): whether showing progress bar. Defaults to False.
+        n_jobs (bool, optional): the number of cores. It only works when `mpi_mode` is
+            False. This parallelization is supported by scikit-learn library in single node.
+
+    Other supported parameters please refer to :class:`BaseModel`.
+    """
+
     def __init__(
         self,
         data: pd.DataFrame,
@@ -35,6 +49,14 @@ class Basis2Model(BaseModel):
         self.n_jobs = kws.get("n_jobs", 1)
 
     def __fit__(self, df: list) -> list:
+        """Train single ML model for one iteration of cross validation.
+
+        Args:
+            df (list): splitted dataset in one iteration.
+
+        Returns:
+            list: return trained ML model.
+        """
         regr = self.regr
         train = np.append(df[0], df[3])
         X_train = self.X[train, :]
@@ -43,6 +65,11 @@ class Basis2Model(BaseModel):
         return regr
 
     def fit(self) -> list:
+        """Train ML models with majority and minority set.
+
+        Returns:
+            list: return trained ML models.
+        """
         splited_data = self.splited_data
         if self.mpi_mode:
             comm = MPI.COMM_WORLD
@@ -57,10 +84,16 @@ class Basis2Model(BaseModel):
             regrs = comm.allgather(local_regrs)
             regrs = list(itertools.chain(*regrs))
         elif self.n_jobs > 1:
-            regrs = Parallel(self.n_jobs, verbose=3)(
-                delayed(self.__fit__)(splited_data[i])
-                for i in tqdm(range(self.iterations))
-            )
+            if self.show_tips:
+                regrs = Parallel(self.n_jobs, verbose=3)(
+                    delayed(self.__fit__)(splited_data[i])
+                    for i in tqdm(range(self.iterations))
+                )
+            else:
+                regrs = Parallel(self.n_jobs, verbose=3)(
+                    delayed(self.__fit__)(splited_data[i])
+                    for i in range(self.iterations)
+                )
         else:
             regrs = []
             if self.show_tips:
@@ -74,6 +107,15 @@ class Basis2Model(BaseModel):
         return regrs
 
     def __predict__(self, df: list, regr) -> list:
+        """Predict result with single trained ML model
+
+        Args:
+            df (list): splitted dataset in one iteration.
+            regr: single trained ML model.
+
+        Returns:
+            list: return prediction result.
+        """
         data = self.data
         X = self.X
         y = self.y
@@ -87,6 +129,14 @@ class Basis2Model(BaseModel):
         return result
 
     def predict(self, regrs: list) -> list:
+        """Predict results with trained ML models.
+
+        Args:
+            regrs (list): trained ML models.
+
+        Returns:
+            list: return prediction results.
+        """
         splited_data = self.splited_data
         if self.mpi_mode:
             comm = MPI.COMM_WORLD
@@ -101,10 +151,16 @@ class Basis2Model(BaseModel):
             results = comm.allgather(local_results)
             results = list(itertools.chain(*results))
         elif self.n_jobs > 1:
-            results = Parallel(self.n_jobs, verbose=3)(
-                delayed(self.__predict__)(splited_data[i], regrs[i])
-                for i in tqdm(range(self.iterations))
-            )
+            if self.show_tips:
+                results = Parallel(self.n_jobs, verbose=3)(
+                    delayed(self.__predict__)(splited_data[i], regrs[i])
+                    for i in tqdm(range(self.iterations))
+                )
+            else:
+                results = Parallel(self.n_jobs, verbose=3)(
+                    delayed(self.__predict__)(splited_data[i], regrs[i])
+                    for i in range(self.iterations)
+                )
         else:
             results = []
             if self.show_tips:
@@ -118,6 +174,11 @@ class Basis2Model(BaseModel):
 
     @timer
     def fit_predict(self) -> list:
+        """Train and predict for all instances
+
+        Returns:
+            list: return prediction results.
+        """
         regrs = self.fit()
         results = self.predict(regrs)
         return results

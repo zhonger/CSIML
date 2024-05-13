@@ -1,15 +1,15 @@
 """Imbalance learning module"""
+
 import copy
 import time
 from typing import Tuple
 
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
-from SIML.analysis.analysis import evaluation, index_to_name
-
-from .basis2 import Basis2Model
+from CSIML.analysis.analysis import evaluation, index_to_name
+from CSIML.model.basis2 import Basis2Model
 
 
 def train_model(
@@ -109,6 +109,44 @@ def learning_rate(
 
 
 class IML(Basis2Model):
+    """Imbalanced machine learning
+
+    Args:
+        data (pd.DataFrame): Initial dataset.
+        basic_model (str, optional): the basic ML model. Defaults to "SVR".
+        cv_method (str, optional): cross validation method. Defaults to "siml".
+        parameters (dict, optional): parameters for basic ML model. It could include
+            "epsilon", "gamma", "C" or other parameters. `epsilon` is the acceptable
+            error for training, which is a small value usually.
+        delta (float, optional): the increment step for weights. Defaults to 0.5.
+        tolerance (float, optional): the tolerance for the error, helpful for numerical
+            convergence. Defaults to 0.005.
+        op_method (str, optional): optimization method for the order. Defaults to "O1".
+            It supports "O1"(error ascending), "O2"(error descending),  "O3"(property
+            ascending) and "O4"(property descending).
+        ranges (np.array, optional): the times range matrix for the error. Defaults to
+            np.array([5,4,3,2,1]).
+        multiples (np.array, optional): the times range matrix for the weight increment
+            corresponding to `ranges` . Defaults to np.array([5,4,3,2,1]).
+        wMAE (bool, optional): whether using weighted MAE to evaluate. Defaults to False.
+        DEBUG (bool, optional): whether using DEBUG mode, printing out the weight
+            learning process. Defaults to False.
+        CHECK (bool, optional): whether using CHECK mode for comparing weights. Defaults
+            to False.
+        mpi_mode (bool, optional): whether using MPI mode. Defaults to False.
+        opt_C (bool, optional): whether optimizing hyperparameter C. Defaults to False.
+        eta (float, optional): the increment step for hyperparameter C. Defaults to 1.0.
+        C_max (float, optional): the maximum for hyperparameter C. Defaults to 50.
+        C_limit (float, optional): the real acceptable error when hyperparameter C is
+            optimized. Defaults to `self.limit`.
+
+    Attributes:
+        limit (float): the real acceptable error used in the calculation, which is the
+            sum of `parameters["epsilon"]` and `tolerance`.
+        increments (np.array): the weights matrix, which is times by `multiples` and
+            `delta`.
+    """
+
     def __init__(
         self,
         data: pd.DataFrame,
@@ -124,7 +162,6 @@ class IML(Basis2Model):
             self.limit = round(self.parameters["epsilon"] + self.tolerance, 6)
         else:
             self.limit = round(0.1 + self.tolerance, 6)
-        self.C_max = kws.get("C_max", 50)
         self.C_limit = kws.get("C_limit", self.limit)
         self.op_method = kws.get("op_method", "O1")
         self.ranges = kws.get("ranges", np.array([5, 4, 3, 2, 1]))
@@ -134,7 +171,8 @@ class IML(Basis2Model):
         self.DEBUG = kws.get("DEBUG", False)
         self.CHECK = kws.get("CHECK", False)
         self.mpi_mode = kws.get("mpi_mode", False)
-        self.opt_C = kws.get("opt_C", True)
+        self.opt_C = kws.get("opt_C", False)
+        self.C_max = kws.get("C_max", 50)
 
     def iml_learn_train(self, regr, train: list, sample_weights: list) -> Tuple:
         """Imbalance Learning basic training function
@@ -148,7 +186,7 @@ class IML(Basis2Model):
 
         Returns:
             Tuple[model, float]: return trained model and prediciton error of last
-            (newly added) training instance .
+            (newly added) training instance.
         """
         X = self.X
         y = self.y
@@ -303,9 +341,8 @@ class IML(Basis2Model):
             sample_weights[len(train) - 1] = coef
             error = target_error
 
-        if DEBUG:
-            if coef != (coef_bak):
-                print(f"{coef:.2f}({(error - limit):.6f}) ->", end=" ")
+        if DEBUG and coef != (coef_bak):
+            print(f"{coef:.2f}({(error - limit):.6f}) ->", end=" ")
 
         return coef, error, step
 
@@ -328,7 +365,7 @@ class IML(Basis2Model):
                 trained.
 
         Returns:
-            coef (float): return the weight for the best instance.
+            list: return the weight for the best instance.
 
         """
         coef = 1.0
@@ -386,14 +423,6 @@ class IML(Basis2Model):
                     f"error: {(error - limit):.6f}, step: {step}, "
                     f"used time: {(end_at - start_at):.3f}s)"
                 )
-            # if parameters["costr"]:
-            #     cost_result = []
-            #     cost_result.append(best)
-            #     cost_result.append(step)
-            #     cost_result.append(coef)
-            #     cost_results.append(cost_result)
-            # if parameters["phar"]:
-            #     pbar.update(1)
 
         return coef
 
@@ -455,9 +484,6 @@ class IML(Basis2Model):
         X_train = self.X[train, :]
         y_train = self.y[train]
         regr, metrics = train_model(self.regr, X_train, y_train, sample_weights)
-        # regr = self.iml_learn_hyper(X_train, y_train, metrics["error"], coefs)
-        # regr.minority_train_set = order.astype(int)
-        # regr.sample_weights = coefs
         if self.opt_C:
             C = self.iml_learn_hyper(X_train, y_train, metrics["error"], coefs)
         else:
@@ -465,7 +491,20 @@ class IML(Basis2Model):
         regr = [C, order.astype(int), coefs]
         return regr
 
-    def iml_learn_hyper(self, X_train, y_train, errors, coefs):
+    def iml_learn_hyper(
+        self, X_train: list, y_train: list, errors: list, coefs: list
+    ) -> float:
+        """Update hyperparameter C for imbalance learning
+
+        Args:
+            X_train (list): the features (input) of the training set.
+            y_train (list): the property (output) of the training set.
+            errors (list): the errors for all instances in the training set.
+            coefs (list): the coefficients(weights) for all instances in the training set.
+
+        Returns:
+            float: return updated hyperparameter C.
+        """
         C = copy.deepcopy(self.parameters["C"])
         regr = copy.deepcopy(self.regr)
         mae = self.get_avg_error(errors, coefs)
@@ -483,20 +522,34 @@ class IML(Basis2Model):
             if mae == old_mae and j > 0:
                 break
             j += 1
-        # if self.wMAE:
-        #     print(f"C={C} wMAE={mae}")
-        # else:
-        #     print(f"C={C} MAE={mae}")
         return C
 
-    def get_avg_error(self, errors: np.array, coefs: list):
+    def get_avg_error(self, errors: np.array, coefs: list) -> float:
+        """Get (weighted) mean average error
+
+        Args:
+            errors (np.array): the errors for all training instances.
+            coefs (list): the coefficients(weights) for all training instances.
+
+        Returns:
+            float: return (weighted) mean average error (MAE or wMAE).
+        """
         if self.wMAE:
             return (sum(errors[: -len(coefs)]) + coefs * errors[-len(coefs) :]) / len(
                 errors
             )
         return errors.mean()
 
-    def __predict__(self, df: pd.DataFrame, regr):
+    def __predict__(self, df: pd.DataFrame, regr) -> list:
+        """Predict all instances in one iteration with trained ML model
+
+        Args:
+            df (pd.DataFrame): the dataset in one iteration of cross validaton.
+            regr: single trained ML model.
+
+        Returns:
+            list: return prediction result.
+        """
         train = np.append(df[0], df[3])
         X_train = self.X[train, :]
         y_train = self.y[train]
@@ -508,11 +561,6 @@ class IML(Basis2Model):
         regr, _ = train_model(regr, X_train, y_train, sample_weights)
         result = []
         if not self.CHECK:
-            # multi = round(majority_train_size/sum(coefs),3)
-            # print(f"Multi is {multi}")
-            # sample_weights[majority_train_size:] *= multi
-            # print(sample_weights)
-            # regr, _ = self.train_model(regr, X[train, :], y[train], sample_weights)
             y_pred = regr.predict(self.X)
             for dfi in df:
                 result = (
@@ -524,7 +572,6 @@ class IML(Basis2Model):
         result.append(regr_c[1])
         result.append(self.y[regr_c[1]])
         keys = index_to_name(self.data, regr_c[1])
-        # values = regr.sample_weights
         values = regr_c[2]
         result.append(keys)
         result.append(values)
@@ -532,46 +579,4 @@ class IML(Basis2Model):
         parameters["C"] = regr_c[0]
         result.append(list(parameters.keys()))
         result.append(list(parameters.values()))
-        return result
-
-
-class IML2(Basis2Model):
-    def __init__(
-        self,
-        data: pd.DataFrame,
-        weights: list,
-        basic_model: str = "SVR",
-        cv_method: str = "siml",
-        **kws,
-    ) -> None:
-        super().__init__(data, basic_model, cv_method, **kws)
-        weights_l = len(weights)
-        weights_l_c = int(self.minority.train)
-        if weights_l == weights_l_c:
-            self.weights = weights
-        else:
-            raise ValueError(
-                f"The length of 'weights' should be {weights_l_c} (not {weights_l})!!!"
-            )
-
-    def __fit__(self, df: list) -> list:
-        regr = self.regr
-        train = np.append(df[0], df[3])
-        X_train = self.X[train, :]
-        y_train = self.y[train]
-        sample_weights = np.ones(len(df[0]))
-        sample_weights = np.append(sample_weights, self.weights)
-        regr, _ = train_model(regr, X_train, y_train, sample_weights)
-        return regr
-
-    def __predict__(self, df: list, regr) -> list:
-        data = self.data
-        X = self.X
-        y = self.y
-        y_pred = regr.predict(X)
-        result = []
-        for dfi in df:
-            result = result + [index_to_name(data, dfi)] + [y[dfi]] + [y_pred[dfi]]
-        result.append(index_to_name(data, df[3]))
-        result.append(self.weights)
         return result

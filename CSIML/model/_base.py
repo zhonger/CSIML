@@ -1,18 +1,47 @@
 """The module for basic model"""
+
 from collections import defaultdict
 
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import AdaBoostRegressor, RandomForestRegressor
+from sklearn.neural_network import MLPRegressor
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.svm import SVR, NuSVR
 from sklearn.tree import DecisionTreeRegressor
-from sklearn.ensemble import AdaBoostRegressor
 
-from SIML.cross_validation.cv import DatasetSize
+from CSIML.cross_validation.cv import DatasetSize
 
 
 class BaseModel(DatasetSize):
+    """Base machine learning model
+
+    It supports:
+        * "SVR" (the same with "NuSVR")
+        * "DT" (Decision Tree)
+        * "RF" (Random Forest)
+        * "Ada" (AdaBoost)
+        * "MLP" (Multi-layer Perceptron)
+        * "NuSVR" (Support Vector Regression with rbf kernel)
+        * "lSVR" (Support Vector Regression with linear kernel)
+        * "pSVR" (Support Vector Regression with polynomial kernel)
+
+    Args:
+        data (pd.DataFrame): the dataset.
+        basic_model (str, optional): the basic machine model. Defaults to "SVR".
+        cv_method (str, optional): cross validation method, Defaults to "siml".
+        sampling_method (str, optional): resampling method, supporting "oversampling",
+            "undersampling". Defaults to None.
+        threhold (float, optional): for splitting majority and minority. Defaults to 5.0
+            (for bandgaps).
+        parameters (dict, optional): parameters for basic machine learning models.
+
+    Attributes:
+        regr: the basic machine learning model.
+        X (np.array): the features (the input of the model).
+        y (np.array): the property (the output of the model).
+    """
+
     def __init__(
         self,
         data: pd.DataFrame,
@@ -22,14 +51,27 @@ class BaseModel(DatasetSize):
     ) -> None:
         self.basic_model = basic_model
         match basic_model := self.basic_model:
+            case "custom":
+                if "regr" in kws:
+                    regr = kws["regr"]
+                else:
+                    raise KeyError(
+                        "'regr' should be defined when basic model is customized."
+                    )
             case "DT":
                 regr = DecisionTreeRegressor(max_depth=10)
             case "RF":
                 regr = RandomForestRegressor(n_estimators=10)
             case "Ada":
                 regr = AdaBoostRegressor(n_estimators=10)
+            case "MLP":
+                regr = MLPRegressor(random_state=1, max_iter=500)
             case "NuSVR":
                 regr = NuSVR(kernel="rbf", C=10)
+            case "lSVR":
+                regr = SVR(kernel="linear", C=10)
+            case "pSVR":
+                regr = SVR(kernel="poly", C=10)
             case _:
                 regr = SVR(kernel="rbf", C=10)
         sampling_method = kws.get("sampling_method", None)
@@ -64,6 +106,12 @@ class BaseModel(DatasetSize):
             * normalizing the features with MinMaxScaler().
 
         It's optional. For bandgaps with features based on elemetns, it's needed.
+
+        Args:
+            ascending (bool, optional): whether ascending by the property value or not.
+                Defaults to False.
+            normalize (bool, optional): whether using MinMax Normalization. Defauls to
+                True.
         """
         data = self.data
         if kws.get("ascending", False):

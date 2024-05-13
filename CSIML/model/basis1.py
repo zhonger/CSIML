@@ -1,15 +1,28 @@
 """The module for basis1 method"""
+
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
-from SIML.analysis.analysis import index_to_name
-from SIML.utils.timer import timer
+from CSIML.analysis.analysis import index_to_name
+from CSIML.utils.timer import timer
 
 from ._base import BaseModel
 
 
 class Basis1Model(BaseModel):
+    """Basis1 method, training only with majority set
+
+    Args:
+        data (pd.DataFrame): the dataset.
+        basic_model (str, optional): the basic ML model. Defaults to "SVR".
+
+    Attributes:
+        cv_method (str): Defaults to "basis1". It cannot be changed.
+
+    Other supported parameters please refer to :class:`BaseModel`.
+    """
+
     def __init__(
         self,
         data: pd.DataFrame,
@@ -20,16 +33,13 @@ class Basis1Model(BaseModel):
         super().__init__(data, basic_model, cv_method, **kws)
 
     def fit(self) -> list:
-        """Train ML models only with majority set and predict all instances
-
-        It is also called as ``basis1`` method.
+        """Train ML models only with majority set
 
         Returns:
-            list: return prediction models.
+            list: return trained ML models.
         """
         splited_data = self.splited_data
-        X = self.X
-        y = self.y
+        X, y = self.X, self.y
         regr = self.regr
         iterations = self.iterations
         regrs = []
@@ -38,15 +48,22 @@ class Basis1Model(BaseModel):
         pbar.set_description("Basis 1 (Fit)")
         for dataset in splited_data:
             train = dataset[0]
-            X_train = X[train, :]
-            y_train = y[train]
+            X_train, y_train = X[train, :], y[train]
             regr = regr.fit(X_train, y_train)
             regrs.append(regr)
             pbar.update(1)
 
         return regrs
 
-    def predict(self, regrs: list):
+    def predict(self, regrs: list) -> list:
+        """Predict all instances in each cross validation iteration with trained ML models
+
+        Args:
+            regrs (list): trained machine learning models.
+
+        Returns:
+            list: return prediction results.
+        """
         data = self.data
         splited_data = self.splited_data
         X = self.X
@@ -59,12 +76,9 @@ class Basis1Model(BaseModel):
             train, validation, majority_test, minority_test = dataset
             majority_test_num = len(majority_test)
             test = np.append(majority_test, minority_test)
-            X_train = X[train, :]
-            y_train = y[train]
-            X_validation = X[validation, :]
-            y_validation = y[validation]
-            X_test = X[test, :]
-            y_test = y[test]
+            X_train, y_train = X[train, :], y[train]
+            X_validation, y_validation = X[validation, :], y[validation]
+            X_test, y_test = X[test, :], y[test]
             y_majority_test = y_test[:majority_test_num]
             y_minority_test = y_test[majority_test_num:]
             y_train_pred = regr.predict(X_train)
@@ -101,6 +115,11 @@ class Basis1Model(BaseModel):
 
     @timer
     def fit_predict(self) -> list:
+        """Train and predict for all instances in each cross validaton iteration
+
+        Returns:
+            list: return prediction results.
+        """
         regrs = self.fit()
         results = self.predict(regrs)
         return results
