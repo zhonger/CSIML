@@ -1,7 +1,7 @@
-SIML.analysis
+CSIML.analysis
 ------------------------------
 
-.. automodule:: SIML.analysis
+.. automodule:: CSIML.analysis
    :members:
    :undoc-members:
    :show-inheritance:

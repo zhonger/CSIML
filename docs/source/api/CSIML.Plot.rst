@@ -1,7 +1,7 @@
-SIML.plot
+CSIML.plot
 ---------------------
 
-.. automodule:: SIML.plot
+.. automodule:: CSIML.plot
    :members:
    :undoc-members:
    :show-inheritance:

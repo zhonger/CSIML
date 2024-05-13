@@ -1,7 +1,7 @@
-SIML.features
+CSIML.features
 -----------------------------
 
-.. automodule:: SIML.features
+.. automodule:: CSIML.features
    :members:
    :undoc-members:
    :show-inheritance:
