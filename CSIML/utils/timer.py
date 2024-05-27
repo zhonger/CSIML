@@ -1,4 +1,5 @@
-"""Timer for function running"""
+"""Timer module"""
+
 from functools import wraps
 from time import time
 
@@ -8,7 +9,6 @@ def timer(func):
 
     Args:
         func (function): the name of function.
-
     """
 
     @wraps(func)

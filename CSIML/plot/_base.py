@@ -1,4 +1,5 @@
 """Base classes or functions for plot module"""
+
 import math
 from typing import Tuple
 
@@ -68,16 +69,6 @@ def count_errors(errors: np.array, t1: float = 0.5, t2: float = 1) -> list:
     num.append(round(c2 / total * 100, 2))
     num.append(round(c3 / total * 100, 2))
     return num
-    # emetric = EMetric(
-    #     c1,
-    #     c2,
-    #     c3,
-    #     round(c1 / total * 100, 2),
-    #     round(c2 / total * 100, 2),
-    #     round(c3 / total * 100, 2),
-    # )
-
-    # return emetric
 
 
 def cal_distribution_elements(
@@ -162,7 +153,15 @@ def cal_distribution(
     return distribution, distribution_sum
 
 
-def cal_distribution_period(results_summary):
+def cal_distribution_period(results_summary: dict) -> list:
+    """Calculate the distribution of periodic table
+
+    Args:
+        results_summary (dict): the counting restuls of elements.
+
+    Returns:
+        list: elements with counts in periodic table
+    """
     elements = []
     PThelper = PT()
     for i in range(1, 119):
@@ -181,14 +180,28 @@ def cal_distribution_period(results_summary):
     return elements
 
 
-def plot_post(filename: str, dpi: int):
+def plot_post(filename: str, dpi: int = 100) -> None:
+    """Postprocessing when plotting with matplotlib
+
+    Args:
+        filename (str): the file name, including the suffix.
+        dpi (int, optional): the dpi of figure. Defaults to 100.
+    """
     if filename:
         plt.savefig(filename, dpi=dpi)
+        plt.close()
     else:
         plt.show()
 
 
-def plotly_post(fig: go.Figure, filename: str):
+def plotly_post(fig: go.Figure, filename: str) -> None:
+    """Postprocessing when plotting with plotly
+
+    Args:
+        fig (go.Figure): plotly figure object.
+        filename (str): the file name, not including the suffix. The suffix will using
+            ".html" automatically.
+    """
     if filename:
         fig.write_html(f"{filename}.html")
     else:
@@ -198,6 +211,16 @@ def plotly_post(fig: go.Figure, filename: str):
 def cal_distribution_circle(
     data: pd.DataFrame, level1: float, level2: float
 ) -> Tuple[int, pd.DataFrame]:
+    """_summary_
+
+    Args:
+        data (pd.DataFrame): _description_
+        level1 (float): _description_
+        level2 (float): _description_
+
+    Returns:
+        Tuple[int, pd.DataFrame]: _description_
+    """
     distribution, _ = cal_distribution(data, level1, level2)
     dt = distribution.T
     dt.columns = ["col1", "col2", "col3", "col4"]
@@ -225,6 +248,14 @@ def make_autopct(values: list) -> str:
 
 
 def get_names(method: str) -> list:
+    """Get the splitted set names
+
+    Args:
+        method (str): the ML method, which supports "basis1" and others.
+
+    Returns:
+        list: return the splitted set names.
+    """
     names1 = [
         "Train (Majority)",
         "Validation (Majority)",

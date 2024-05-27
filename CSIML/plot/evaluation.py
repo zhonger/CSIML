@@ -1,4 +1,5 @@
 """Plot figures for evaluating performance"""
+
 import matplotlib.pyplot as plt
 import numpy as np
 import plotly.graph_objects as go
@@ -19,6 +20,8 @@ def plot_prediction(
         method (str): the method name.
         filename (str, optional): the filename you want to save the figure. Defaults to
             None.
+        unit (str, optional): the unit for the property. Defaults to "eV".
+        ranges (list, optional): the rangs for the property values. Dafaults to [0, 15].
     """
     names = get_names(method)
     colors = kws.get(
@@ -32,25 +35,27 @@ def plot_prediction(
             "rgb(140, 86, 75)",
         ],
     )
+    unit = kws.get("unit", "eV")
+    ranges = kws.get("ranges", [0, 15])
     if title is None:
         title = method
 
     fig = go.Figure()
-    plot_prediction_bg_error(fig)
+    plot_prediction_bg_error(fig, **kws)
     plot_prediction_points(fig, result, names, colors)
-    plot_prediction_bg(fig)
+    plot_prediction_bg(fig, **kws)
     fig.update_layout(
         title="<b>" + title + "<b>",
         titlefont={"size": 24},
-        xaxis_title="Experimental (eV)",
-        yaxis_title="Prediction (eV)",
+        xaxis_title=f"Experimental ({unit})",
+        yaxis_title=f"Prediction ({unit})",
         width=1300,
         height=1200,
         paper_bgcolor="white",
         showlegend=True,
         template="simple_white",
-        xaxis_range=[0, 15],
-        yaxis_range=[0, 15],
+        xaxis_range=ranges,
+        yaxis_range=ranges,
         xaxis_title_font_size=24,
         yaxis_title_font_size=24,
         xaxis_linewidth=3,
@@ -64,6 +69,14 @@ def plot_prediction(
 def plot_prediction_points(
     fig: go.Figure, result: list, names: list, colors: list
 ) -> None:
+    """Plot prediction points in the canvas.
+
+    Args:
+        fig (go.Figure): the figure object.
+        result (list): the results.
+        names (list): the names for data group.
+        colors (list): the colors for data group.
+    """
     length = 6 if int(len(result) / 3) > 6 else int(len(result) / 3)
     for i in range(length):
         marker = {
@@ -80,7 +93,15 @@ def plot_prediction_points(
         fig.add_trace(go.Scatter(x=result[1 + 3 * i], y=result[2 + 3 * i], **kws))
 
 
-def plot_prediction_bg(fig: go.Figure) -> None:
+def plot_prediction_bg(fig: go.Figure, **kwargs) -> None:
+    """Plot prediction backgroup
+
+    Args:
+        fig (go.Figure): the figure object.
+        ranges (list, optional): the range for the property values. Defaults to [0, 15].
+        threshold (float, optional): the threshold for splitting majority and minority
+            set. Defaults to 5.0.
+    """
     kws = {
         "annotation_position": "top",
         "annotation_font_size": 24,
@@ -89,42 +110,91 @@ def plot_prediction_bg(fig: go.Figure) -> None:
         "line_width": 0,
     }
     redline = {"width": 3, "dash": "dash", "color": "red"}
-    fig.add_vline(x=5, line=redline)
-    fig.add_vrect(x0=0, x1=5, annotation_text="Majority", fillcolor="skyblue", **kws)
-    fig.add_vrect(x0=5, x1=15, annotation_text="Minority", fillcolor="lightgray", **kws)
+    ranges = kwargs.get("ranges", [0, 15])
+    threshold = kwargs.get("threshold", 5)
+    fig.add_vline(x=threshold, line=redline)
+    fig.add_vrect(
+        x0=ranges[0],
+        x1=threshold,
+        annotation_text="Majority",
+        fillcolor="skyblue",
+        **kws,
+    )
+    fig.add_vrect(
+        x0=threshold,
+        x1=ranges[1],
+        annotation_text="Minority",
+        fillcolor="lightgray",
+        **kws,
+    )
 
 
-def plot_prediction_bg_error(fig: go.Figure) -> None:
+def plot_prediction_bg_error(fig: go.Figure, **kws) -> None:
+    """Plot prediction backgroud error areas
+
+    Args:
+        fig (go.Figure): the figure object.
+        error1 (float, optional): the first level of error area (big). Defaults to 1.0.
+        error2 (float, optional): the second level of error area (small). Defaults to 0.5.
+        ranges (list, optional): the range for the property values. Defaults to [0, 15].
+        unit (str, optional): the unit for the property value. Defaults to "eV".
+    """
     whiteline = {"color": "rgba(255,255,255,0)"}
+    error1 = kws.get("error1", 1)
+    error2 = kws.get("error2", 0.5)
+    ranges = kws.get("ranges", [0, 15])
+    unit = kws.get("unit", "eV")
     errorline1 = {
         "fill": "toself",
         "fillcolor": "rgba(226, 201, 212, 1)",
         "line": whiteline,
-        "name": "1 eV",
+        "name": f"{error1} {unit}",
     }
     errorline2 = {
         "fill": "toself",
         "fillcolor": "rgba(204, 219, 214, 1)",
         "line": whiteline,
-        "name": "0.5 eV",
+        "name": f"{error2} {unit}",
     }
     bestline = {"marker_color": "red", "line_dash": "dash", "name": "Best line"}
     fig.add_trace(
-        go.Scatter(x=[-3, 16] + [16, -3], y=[-2, 17] + [15, -4], **errorline1)
+        go.Scatter(
+            x=[ranges[0] - 3, ranges[1] + 1] + [ranges[1] + 1, ranges[0] - 3],
+            y=[ranges[0] - 3 + error1, ranges[1] + 1 + error1]
+            + [ranges[1] + 1 - error1, ranges[0] - 3 - error1],
+            **errorline1,
+        )
     )
     fig.add_trace(
-        go.Scatter(x=[-3, 16] + [16, -3], y=[-2.5, 16.5] + [15.5, -3.5], **errorline2)
+        go.Scatter(
+            x=[ranges[0] - 3, ranges[1] + 1] + [ranges[1] + 1, ranges[0] - 3],
+            y=[ranges[0] - 3 + error2, ranges[1] + 1 + error2]
+            + [ranges[1] + 1 - error2, ranges[0] - 3 - error2],
+            **errorline2,
+        )
     )
-    fig.add_trace(go.Scatter(x=[-3, 16], y=[-3, 16], **bestline))
+    fig.add_trace(
+        go.Scatter(
+            x=[ranges[0] - 3, ranges[1] + 1],
+            y=[ranges[0] - 3, ranges[1] + 1],
+            **bestline,
+        )
+    )
 
 
 def plot_rider(y: list, filename: str = None, **kws) -> None:
+    """Plot rider figure for performance evaluation
+
+    Args:
+        y (list): the metrics' values.
+        filename (str, optional): the filename to save. Defaults to None.
+        dpi (int, optional): the dpi for the figure. Defaults to 100.
+    """
     dpi = kws.get("dpi", 100)
     fig = plt.figure(figsize=(6, 6), dpi=100)
     ax = fig.add_axes([0, 0, 1, 1], aspect=1)
 
     size = 0.1
-    vals = np.ones(12)
 
     # A nice set of colors for seasons
     cmap20c = plt.get_cmap("tab20c")
@@ -149,7 +219,7 @@ def plot_rider(y: list, filename: str = None, **kws) -> None:
         np.ones(12),
         radius=1.0,
         colors=colors,
-        wedgeprops=dict(width=size, edgecolor="w"),
+        wedgeprops={"width": size, "edgecolor": "w"},
     )
 
     labels = [
@@ -167,27 +237,7 @@ def plot_rider(y: list, filename: str = None, **kws) -> None:
         r"$1-R^2$",
     ]
     for i, label in enumerate(labels):
-        plot_rider_label(ax, label, (i+0.5)*2*np.pi/12, 1-0.5*size)
-    # This could be made through a list but it is easier to red this way
-    # plot_rider_label(ax, "Total MAE", 0.5 * 2 * np.pi / 12, 1 - 0.5 * size)
-    # plot_rider_label(ax, "Majority MAE", 1.5 * 2 * np.pi / 12, 1 - 0.5 * size)
-    # plot_rider_label(ax, "Minority MAE", 2.5 * 2 * np.pi / 12, 1 - 0.5 * size)
-    # plot_rider_label(ax, "MAE", 1.5 * 2 * np.pi / 12, 1 + size, 0.0125)
-
-    # plot_rider_label(ax, "Minority RMSE", 3.5 * 2 * np.pi / 12, 1 - 0.5 * size)
-    # plot_rider_label(ax, "Majority RMSE", 4.5 * 2 * np.pi / 12, 1 - 0.5 * size)
-    # plot_rider_label(ax, "Total RMSE", 5.5 * 2 * np.pi / 12, 1 - 0.5 * size)
-    # plot_rider_label(ax, "RMSE", 4.5 * 2 * np.pi / 12, 1 + size, 0.0125)
-
-    # plot_rider_label(ax, "Variance", 6.5 * 2 * np.pi / 12, 1 - 0.5 * size)
-    # plot_rider_label(ax, "MAPE", 7.5 * 2 * np.pi / 12, 1 - 0.5 * size)
-    # plot_rider_label(ax, r"$1-R^2$", 8.5 * 2 * np.pi / 12, 1 - 0.5 * size)
-    # plot_rider_label(ax, "Others", 7.5 * 2 * np.pi / 12, 1 + size, 0.0125)
-
-    # plot_rider_label(ax, "Minority MAE STD", 9.5 * 2 * np.pi / 12, 1 - 0.5 * size)
-    # plot_rider_label(ax, "Majority MAE STD", 10.5 * 2 * np.pi / 12, 1 - 0.5 * size)
-    # plot_rider_label(ax, "Total MAE STD", 11.5 * 2 * np.pi / 12, 1 - 0.5 * size)
-    # plot_rider_label(ax, "MAE STD", 10.5 * 2 * np.pi / 12, 1 + size, 0.0125)
+        plot_rider_label(ax, label, (i + 0.5) * 2 * np.pi / 12, 1 - 0.5 * size)
 
     # Add a polar projection on top of the previous one
     ax = fig.add_axes([0.15, 0.15, 0.7, 0.7], projection="polar")
@@ -216,7 +266,18 @@ def plot_rider(y: list, filename: str = None, **kws) -> None:
     plot_post(filename, dpi)
 
 
-def plot_rider_label(ax, text, angle, radius=1.0, scale=0.005):
+def plot_rider_label(
+    ax: plt.axes, text: str, angle: float, radius: float = 1.0, scale: float = 0.005
+) -> None:
+    """Plot rider label for the rdier figure of performance evaluation
+
+    Args:
+        ax (plt.axes): the subfigure.
+        text (str): the text string.
+        angle (float): the angle for the text string.
+        radius (float, optional): the radius for the rider part. Defaults to 1.0.
+        scale (float, optional): the scale for the figure. Defaults to 0.005.
+    """
     fp = FontProperties(weight="bold")
     path = TextPath((0, 0), text, size=10, prop=fp)
     path.vertices.flags.writeable = True

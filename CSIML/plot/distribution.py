@@ -1,4 +1,5 @@
 """Distribution figures for dataset"""
+
 import math
 
 import matplotlib as mpl
@@ -28,6 +29,7 @@ def plot_histogram(data: pd.DataFrame, filename: str = None, **kws) -> None:
             Defaults to None.
         num_bins (int, optional): the num of bins. Defaults to 80.
         ranges (list, optional): the range of property values. Defaults to [-2, 22].
+        density (bool, optional): using density or count numbers. Defaults to True.
         dpi (int, optional): the dpi value for figures. Defaults to 100.
         xlabel (str, optional): the x axis label name. Defaults to "Experimental
             bandgaps (eV)".
@@ -39,22 +41,35 @@ def plot_histogram(data: pd.DataFrame, filename: str = None, **kws) -> None:
             "black".
     """
     x = data["Experimental"].values
+    bwith = kws.get("bwith", 2)
     num_bins = kws.get("num_bins", 80)
     ranges = kws.get("ranges", [-2, 22])
+    density = kws.get("density", True)
     dpi = kws.get("dpi", 100)
     xlabel = kws.get("xlabel", "Experimental bandgaps (eV)")
     ylabel = kws.get("ylabel", "Probability density")
     color = kws.get("color", "orange")
     facecolor = kws.get("facecolor", "bisque")
     edgecolor = kws.get("edgecolor", "black")
+    figsize = kws.get("figsize", (8, 6))
 
-    fig, ax = plt.subplots(dpi=dpi)
-    ax.hist(x, num_bins, ranges, density=True, facecolor=facecolor, edgecolor=edgecolor)
+    fig, ax = plt.subplots(dpi=dpi, figsize=figsize)
+    ax.hist(
+        x, num_bins, ranges, density=density, facecolor=facecolor, edgecolor=edgecolor
+    )
     sns.kdeplot(x, fill=True, color=color, alpha=0.3)
-    fontdict = {"weight": "bold"}
+    fontdict = kws.get("fontdic", {"weight": "bold"})
     ax.set_xlabel(xlabel, fontdict=fontdict)
     ax.set_ylabel(ylabel, fontdict=fontdict)
+    if "xticks" in kws:
+        plt.xticks(kws["xticks"], kws["xticks"])
+    ax.tick_params(axis="both", labelsize=kws.get("labelsize", 12))
     ax.set_xlim(ranges)
+    ax.spines["top"].set_linewidth(bwith)
+    ax.spines["bottom"].set_linewidth(bwith)
+    ax.spines["left"].set_linewidth(bwith)
+    ax.spines["right"].set_linewidth(bwith)
+    ax.tick_params(width=kws.get("tick_width", 2), length=kws.get("tick_length", 5))
     fig.tight_layout()
     plot_post(filename, dpi)
 
@@ -90,13 +105,16 @@ def plot_bar(
     width = kws.get("width", 0.2)
     species = ("1", "2", "3", "4")
     x = np.arange(len(species))
+    figsize = kws.get("figsize", (8, 6))
 
-    _, ax = plt.subplots(dpi=dpi)
+    _, ax = plt.subplots(dpi=dpi, figsize=figsize)
     plot_bar_rect(ax, colors, statss, x, width)
-    ax.set_xlabel("# Elements", fontweight="bold")
-    ax.set_ylabel("Count", fontweight="bold")
+    fontdict = kws.get("fontdic", {"weight": "bold"})
+    ax.set_xlabel("# Elements", fontdict=fontdict)
+    ax.set_ylabel("Count", fontdict=fontdict)
+    ax.tick_params(axis="both", labelsize=kws.get("labelsize", 12))
     ax.set_xticks(x + width, species)
-    ax.legend(loc="upper left", ncols=3, frameon=False)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, 1.15), ncols=3, frameon=False)
     ax.set_ylim(0, y_max)
     plot_post(filename, dpi)
 
@@ -138,12 +156,14 @@ def plot_period(
             None.
         dpi (int, optional): the dpi value of the figure. Defaults to 100.
         xymax (tuple, optional): the x and y max value. Defaults to (20, 11).
+        c_max (int, optional): the maxmium of counts. Defaults to 111.
         cell_length (float, optional): the length of each cell. Defaults to 1.
         cell_gap (float, optional): the gap between cells. Defaults to 0.1.
         cell_edge_width (float, optional): the edge width of cells. Defaults to 0.5.
     """
     dpi = kws.get("dpi", 100)
     xymax = kws.get("xymax", (20, 11))
+    c_max = kws.get("c_max", 111)
     cell_length = kws.get("cell_length", 1)
     cell_gap = kws.get("cell_gap", 0.1)
     cell_edge_width = kws.get("cell_edge_width", 0.5)
@@ -153,7 +173,7 @@ def plot_period(
 
     plt.figure(figsize=(10, 5), dpi=dpi)
     my_cmap = mpl.cm.get_cmap(kws.get("cmap", "RdYlGn"))
-    norm = mpl.colors.Normalize(1, 111)
+    norm = mpl.colors.Normalize(1, c_max)
     cells = Cells(cell_length, cell_edge_width, cell_gap, my_cmap, norm)
     my_cmap.set_under("None")
     plt.colorbar(mpl.cm.ScalarMappable(norm, my_cmap), drawedges=False)

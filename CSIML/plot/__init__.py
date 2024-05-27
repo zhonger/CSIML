@@ -32,7 +32,15 @@ from .evaluation import (
     plot_rider,
     plot_rider_label,
 )
-from .hyperparameter import plot_hyperparmeter
+from .hyperparameter import (
+    get_hyper_results,
+    get_hyper_results_batch,
+    plot_hyper,
+    plot_hyper_batch,
+    plot_hyper_heatmap,
+    plot_hyper_heatmap_batch,
+    plot_hyperparameter,
+)
 from .periodic_table import PT
 
 __all__ = [
@@ -66,6 +74,12 @@ __all__ = [
     "plot_prediction_bg_error",
     "plot_rider",
     "plot_rider_label",
+    "get_hyper_results",
+    "get_hyper_results_batch",
+    "plot_hyper",
+    "plot_hyper_batch",
+    "plot_hyper_heatmap",
+    "plot_hyper_heatmap_batch",
     "plot_hyperparameter",
     "PT",
 ]

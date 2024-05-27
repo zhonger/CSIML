@@ -9,13 +9,24 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from SIML.analysis.main import Analysis
-from SIML.model.iml import IML
-from SIML.model.basis2 import Basis2Model
+from CSIML.analysis.main import Analysis
+from CSIML.model.iml import IML, Basis2Model
 
 
 @dataclass
 class ScaleInfo:
+    """ScaleInfo dataclass
+
+    Args:
+        seed (int): the seed for random sampling.
+        path (str): the filename including the path.
+        sheet_name (str): the sheet name in the excel file.
+        ratio (float): the ratio between majority and minority set.
+        data (pd.DataFrame): original data including material names and property values.
+        maj_set (list): majority set (whose property value is smaller than threshold).
+        min_set (list): minority set (whose property value is bigger than threshold).
+    """
+
     seed: int
     path: str
     sheet_name: str
@@ -27,6 +38,17 @@ class ScaleInfo:
 
 @dataclass
 class PerfInfo:
+    """PerfInfo dataclass
+
+    Args:
+        random_state (int): the seed for random sampling.
+        n_jobs (int): the cpu cores used (especially for the parallelization).
+        parameters (dict): hyper parameters for the basic ML model.
+        mpi_mode (bool): whether using mpi mode.
+        ranges (list): the `ranges` parameter for IML function.
+        multiples (list): the `multiples` parameter for IML function.
+    """
+
     random_state: int
     n_jobs: int
     parameters: dict
@@ -39,10 +61,16 @@ def read_data(**kws) -> ScaleInfo:
     """Read original dataset from excel file
 
     Args:
-
+        seed (int, optional): the seed for random sampling. Defaults to 10.
+        path (str, optional): the filename including the path. Defaults to "bandgap.xlsx".
+        sheet_name (str, optional): the sheet name in the excel file. Defaults to "3895".
+        threshold (float, optional): the threshold for splitting majority and minority
+            set. Defaults to 5.0.
+        ratio (float, optional): the ratio between majority and minority set. Defauts to
+            the original ratio in original dataset.
 
     Returns:
-        ScaleInfo: _description_
+        ScaleInfo: return scale information object.
     """
     seed = kws.get("seed", 10)
     path = kws.get("path", "bandgap.xlsx")
@@ -55,7 +83,18 @@ def read_data(**kws) -> ScaleInfo:
     return ScaleInfo(seed, path, sheet_name, ratio, data, maj_set, min_set)
 
 
-def generate_dataset(total, **kws):
+def generate_dataset(total: int, **kws) -> pd.DataFrame:
+    """Generate dataset according to scale information
+
+    Args:
+        total (int): the total number of dataset.
+
+    Raises:
+        ValueError: when the ratio is bigger than 1.
+
+    Returns:
+        pd.DataFrame: return rescaled dataset.
+    """
     info = read_data(**kws)
     random.seed(info.seed)
     if info.ratio > 1:
@@ -70,7 +109,12 @@ def generate_dataset(total, **kws):
     return data_s
 
 
-def perf_init(**kws):
+def perf_init(**kws) -> PerfInfo:
+    """Initialize the parameters for performance evaluation
+
+    Returns:
+        PerfInfo: the performance evaluation object.
+    """
     random_state = kws.get("random_state", 10)
     n_jobs = kws.get("n_jobs", 25)
     parameters = kws.get(
@@ -87,7 +131,17 @@ def perf_init(**kws):
     return PerfInfo(random_state, n_jobs, parameters, mpi_mode, ranges, multiples)
 
 
-def perf(data: pd.DataFrame, tasks: list, path: str, **kws):
+def perf(data: pd.DataFrame, tasks: list, path: str, **kws) -> list:
+    """Evaluate the performace of rescaled dataset
+
+    Args:
+        data (pd.DataFrame): the dataset.
+        tasks (list): the batch tasks, like [[method, cv_method, sampling_method, opt_C]].
+        path (str): the path to save files.
+
+    Returns:
+        list: return the performance list.
+    """
     dataset = data.shape[0]
     info = perf_init(**kws)
     ts = []
@@ -146,7 +200,6 @@ def rescale(total: int, **kws) -> list:
     Args:
         total (int): the total number of dataset.
         seed (int, optional): the random seed for dataset rescaling. Defaults to 10.
-
 
     Returns:
         list: analysis result objects.

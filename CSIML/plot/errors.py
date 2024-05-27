@@ -1,4 +1,5 @@
 """Plot figures for evaluating errors"""
+
 import numpy as np
 import plotly.graph_objects as go
 
@@ -59,14 +60,6 @@ def plot_prediction_mape(
         filename (str, optional): the filename you want to save the figure. Defaults to
             None.
     """
-    # definitions for the axes
-    # left, width = 0.1, 0.65
-    # bottom, height = 0.1, 0.65
-    # spacing = 0.005
-
-    # rect_scatter = [left, bottom, width, height]
-    # rect_histy = [left + width + spacing, bottom, 0.2, height]
-
     names = get_names(method)
 
     fig = go.Figure()
