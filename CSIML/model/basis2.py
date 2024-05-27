@@ -16,7 +16,7 @@ if os.getenv("INTELEX", "False") == "True":
     patch_sklearn()
 
 
-from CSIML.analysis.analysis import index_to_name
+from CSIML.analysis._base import index_to_name
 from CSIML.model._base import BaseModel
 from CSIML.utils.timer import timer
 

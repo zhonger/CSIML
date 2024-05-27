@@ -261,7 +261,21 @@ def save_metrics_batch(
         print(f"Random seed {random_state} has been saved.")
 
 
-def load_metrics(dataset, path, methods, random_state, **kws):
+def load_metrics(
+    dataset: str, path: str, methods: list, random_state: int, **kws
+) -> pd.DataFrame:
+    """Load metrics from files
+
+    Args:
+        dataset (str): the dataset name.
+        path (str): the path for saved metric files.
+        methods (list): the method name.
+        random_state (int): the seed for random sampling.
+        decimal (int, optional): the decimal place for metrics. Defaults to 3.
+
+    Returns:
+        pd.DataFrame: return metrics.
+    """
     decimal = kws.get("decimla", 3)
     ob = []
     for method in methods:

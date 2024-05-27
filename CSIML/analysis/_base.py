@@ -75,6 +75,14 @@ def metrics2msg(metrics: list, method: str = "SIML") -> str:
 
 
 def metrics2array(metrics: list) -> list:
+    """Convert metrics from list to array format
+
+    Args:
+        metrics (list): the metrics for performance evaluation.
+
+    Returns:
+        list: return array format metrices.
+    """
     results = []
     it = iter(metrics)
     for _ in range(3):

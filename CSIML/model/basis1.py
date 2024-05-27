@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from tqdm.auto import tqdm
 
-from CSIML.analysis.analysis import index_to_name
+from CSIML.analysis._base import index_to_name
 from CSIML.utils.timer import timer
 
 from ._base import BaseModel

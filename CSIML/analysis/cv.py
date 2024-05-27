@@ -1,15 +1,28 @@
 """The module for CV method analysis"""
+
 import os
 import pickle
 
 import pandas as pd
 
-from SIML.model.basis2 import Basis2Model
+from CSIML.model.basis2 import Basis2Model
 
-from .analysis import Analysis
+from .main import Analysis
 
 
 class AnalysisCV:
+    """Analysis cross-validation class
+    
+    Args:
+        datasets (list): datasets.
+        cv_method (str): the cross-validation method name.
+        title (str, optional): the title for the analysis. Defaults to None.
+        save_path (str, optional): the path to save files. Defaults to "tmp".
+        sampling_method (str, optional): the sampling method. Defaults to None.
+        random_state (int, optional): the seed for random sampling. Defaults to 10.
+        parameters (dict, optional): the parameters for the basic ML model. Defaults to 
+            {"C": 10, "gamma": 0.01, "epsilon": 0.2}.
+    """
     def __init__(
         self, path: str, datasets: list, cv_method: str, title: str = None, **kws
     ) -> None:
@@ -44,12 +57,13 @@ class AnalysisCV:
             filename = f"{save_path}/t{dataset}_{cv_method}.pkl"
             with open(filename, "wb") as f:
                 pickle.dump(results, f)
-            a1 = Analysis(filename, method=f"{dataset} {title}")
+            a1 = Analysis(filename=filename, method=f"{dataset} {title}")
             summary.append(a1)
             print(a1)
         self.summary = summary
 
     def __str__(self) -> str:
+        """The string for print"""
         titles = [
             "Dataset",
             "Total_MAE",

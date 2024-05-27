@@ -72,7 +72,7 @@ def plot_prediction_mape(
             "marker": marker,
         }
         x = result[1 + 3 * i]
-        if metric is "mape":
+        if metric == "mape":
             y = (result[2 + 3 * i] / result[1 + 3 * i]) - 1
         else:
             y = result[2 + 3 * i] - result[1 + 3 * i]

@@ -9,7 +9,7 @@ from joblib import Parallel, delayed
 from tqdm import tqdm
 
 
-def write_excel(result: pd.DataFrame, path: str, mode: str, **kws):
+def write_excel(result: pd.DataFrame, path: str, mode: str, **kws)->None:
     """Write pandas dataframe to excel file
 
     Args:
