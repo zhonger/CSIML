@@ -1,16 +1,14 @@
 [tool.poetry]
-name = "SIML"
-version = "0.1.0"
-description = "A library for studying small and imbalanced materials datasets"
-authors = ["Li Shengzhou <s2036012@s.tsukuba.ac.jp>"]
+name = "CSIML"
+version = "1.0.0"
+description = "Cost-sensitive and iterative machine learning method for small and imbalanced materials datasets"
+authors = ["Li Shengzhou <s2036012@u.tsukuba.ac.jp>"]
 license = "MIT"
 readme = "README.md"
-homepage = "https://github.com/zhonger/SIML"
-repository = "https://github.com/zhonger/SIML"
-documentation = "https://siml.readthedoc.io"
-packages = [
-    { include = "SIML", from = "."}
-]
+homepage = "https://github.com/zhonger/CSIML"
+repository = "https://github.com/zhonger/CSIML"
+documentation = "https://csiml.readthedoc.io"
+packages = [{ include = "CSIML", from = "." }]
 
 [tool.poetry.dependencies]
 python = "^3.10"

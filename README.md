@@ -1,6 +1,6 @@
-# SIML
+# CSIML
 
-SIML (ML for small and imbalanced materials science datasets).
+CSIML (ML for small and imbalanced materials science datasets).
 
 ## Usage
 
