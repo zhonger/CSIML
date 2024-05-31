@@ -1,6 +1,10 @@
 # CSIML
 
-CSIML (ML for small and imbalanced materials science datasets).
+**CSIML** is a "cost-sensitive and iterative machine-learning" method for small and imbalanced materials data sets.
+
+## Cite it
+
+**S Li**, A Nakata*. CSIML: a cost-sensitive and iterative machine-learning method for small and imbalanced materials data sets[J]. *Chemistry Letters*, 2024, 53(5). [[DOI]](https://doi.org/10.1093/chemle/upae090)
 
 ## Usage
 
